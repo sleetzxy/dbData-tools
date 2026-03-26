@@ -154,7 +154,7 @@ dbData-tools/
 使用 PyInstaller 将应用打包为 Windows 单文件程序（无需安装 Python）：
 
 ```bash
-pyinstaller --clean --onefile --windowed --uac-admin --name "PostgreSQL数据工具集" .\main_gui.py
+pyinstaller --clean --onefile --windowed --uac-admin --name "DB数据工具集" .\main_gui.py
 ```
 
 打包完成后，可执行文件位于 `dist/` 目录。
