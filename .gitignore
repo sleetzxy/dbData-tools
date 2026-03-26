@@ -1,0 +1,97 @@
+# ===========================
+# Python
+# ===========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+
+# 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# 分发 / 打包
+dist/
+build/
+*.egg-info/
+*.egg
+MANIFEST
+wheels/
+*.whl
+
+# pytest / 测试缓存
+.pytest_cache/
+.cache/
+tests/.pytest_tmp/
+tests/.tmp_imports/
+tests/.tmp_exports/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# mypy / 类型检查
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ===========================
+# PyInstaller
+# ===========================
+*.spec
+build/
+dist/
+
+# ===========================
+# 数据库连接配置（含密码，禁止入库）
+# ===========================
+*.json
+!.vscode/*.json
+# 若配置文件有固定名称，可在此精确排除，例如：
+# db_config.json
+# connections.json
+
+# ===========================
+# 日志文件
+# ===========================
+*.log
+logs/
+
+# ===========================
+# 临时 / 系统文件
+# ===========================
+*.tmp
+*.bak
+*.swp
+*.swo
+~$*
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ===========================
+# IDE / 编辑器
+# ===========================
+.idea/
+*.iml
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# ===========================
+# 文档生成
+# ===========================
+docs/_build/
+site/
+
+# ===========================
+# 其他产物
+# ===========================
+*.sqlite3
+*.db
