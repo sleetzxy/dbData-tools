@@ -1,0 +1,6 @@
+customtkinter==5.2.2
+psycopg2-binary==2.9.11
+pypinyin==0.55.0
+pyzipper==0.3.6
+clickhouse-connect==0.8.18
+pytest==9.0.2
