@@ -1,4 +1,4 @@
-# PostgreSQL 数据工具集
+# DB 数据工具集
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.8%2B-blue?logo=python" alt="Python">
