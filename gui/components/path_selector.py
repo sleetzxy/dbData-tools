@@ -37,7 +37,8 @@ class PathSelector(ctk.CTkFrame):
 
         # 标签
         self.label = StyledLabel(self, text=label_text)
-        self.label.pack(anchor='w', pady=(0, 3))
+        if label_text:
+            self.label.pack(anchor='w', pady=(0, 3))
 
         # 路径输入框和浏览按钮
         path_frame = ctk.CTkFrame(self, fg_color="transparent")
