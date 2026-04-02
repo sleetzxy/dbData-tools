@@ -181,6 +181,7 @@ class ClickHouseAdapter:
         schema: str = "",
         pre_sql_file: str = "",
         need_backup: bool = False,
+        truncate_before: bool = True,
         logger: Optional[Any] = None,
     ) -> Dict[str, Any]:
         database = self._validate_identifier(str(db_config.get("database", "")).strip(), "database")
@@ -241,7 +242,8 @@ class ClickHouseAdapter:
                 if logger:
                     logger.info(f"\u6b63\u5728\u5bfc\u5165 {database}.{table_name} <- {csv_file}")
                 if hasattr(client, "command"):
-                    client.command(f"TRUNCATE TABLE {qualified}")
+                    if truncate_before:
+                        client.command(f"TRUNCATE TABLE {qualified}")
                     with open(csv_file, "rb") as f:
                         data = f.read()
                         client.command(

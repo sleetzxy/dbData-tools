@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import tempfile
 import shutil
@@ -1106,3 +1106,80 @@ def test_clickhouse_import_backup_failure_stops_import(monkeypatch):
     assert result['error'] == ''.join(chr(x) for x in [23548, 20837, 21069, 22791, 20221, 22833, 36133]) + ': backup failed'
     assert result['error_tables'] == []
     assert result['imported_tables'] == []
+
+
+def test_postgresql_import_csv_truncate_before_false_skips_truncate():
+    """truncate_before=False 时不应执行 TRUNCATE，验证参数被接受不报错"""
+    from db.adapters.postgresql_adapter import PostgreSQLAdapter
+    adapter = PostgreSQLAdapter()
+
+    truncated = []
+
+    class FakeCursor:
+        def execute(self, sql_obj, params=None):
+            sql_str = str(sql_obj)
+            if "TRUNCATE" in sql_str.upper():
+                truncated.append(sql_str)
+        def copy_expert(self, sql_str, f): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+
+    class FakeConn:
+        def __init__(self):
+            self.autocommit = False
+            self._cursor = FakeCursor()
+        def cursor(self): return self._cursor
+        def commit(self): pass
+        def rollback(self): pass
+
+    import tempfile, os, shutil
+    tmp = tempfile.mkdtemp()
+    try:
+        csv_file = os.path.join(tmp, "t1.csv")
+        with open(csv_file, "w", encoding="utf-8") as f:
+            f.write("id,name\n1,alice\n")
+
+        adapter.import_csv(
+            client=FakeConn(),
+            db_config={"database": "testdb"},
+            table_names=["t1"],
+            data_dir=tmp,
+            schema="public",
+            truncate_before=False,
+            logger=None,
+        )
+        assert truncated == [], f"TRUNCATE should not have been called but got: {truncated}"
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_clickhouse_import_csv_truncate_before_false_skips_truncate():
+    """ClickHouse truncate_before=False 时不执行 TRUNCATE"""
+    from db.adapters.clickhouse_adapter import ClickHouseAdapter
+    adapter = ClickHouseAdapter()
+
+    commands_called = []
+
+    class FakeClient:
+        def command(self, sql, data=None):
+            commands_called.append(sql)
+
+    import tempfile, os, shutil
+    tmp = tempfile.mkdtemp()
+    try:
+        csv_file = os.path.join(tmp, "t1.csv")
+        with open(csv_file, "wb") as f:
+            f.write(b"id,name\n1,alice\n")
+
+        adapter.import_csv(
+            client=FakeClient(),
+            db_config={"database": "testdb"},
+            table_names=["t1"],
+            data_dir=tmp,
+            truncate_before=False,
+            logger=None,
+        )
+        truncate_commands = [c for c in commands_called if "TRUNCATE" in c.upper()]
+        assert truncate_commands == [], f"TRUNCATE should not have been called but got: {truncate_commands}"
+    finally:
+        shutil.rmtree(tmp)

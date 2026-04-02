@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 from datetime import datetime
@@ -349,6 +349,7 @@ class PostgreSQLAdapter:
         schema: str = "public",
         pre_sql_file: str = "",
         need_backup: bool = False,
+        truncate_before: bool = True,
         logger: Optional[Any] = None,
     ) -> Dict[str, Any]:
         schema = schema.strip() if isinstance(schema, str) else schema
@@ -405,13 +406,14 @@ class PostgreSQLAdapter:
                     if logger:
                         logger.info(f"Importing {schema}.{table} <- {csv_file}")
                     with client.cursor() as cursor:
-                        truncate_sql = sql.SQL("TRUNCATE TABLE {}.{}").format(
-                            sql.Identifier(schema),
-                            sql.Identifier(table),
-                        )
-                        cursor.execute(truncate_sql)
-                        if logger:
-                            logger.info(f"Table {schema}.{table} truncated")
+                        if truncate_before:
+                            truncate_sql = sql.SQL("TRUNCATE TABLE {}.{}").format(
+                                sql.Identifier(schema),
+                                sql.Identifier(table),
+                            )
+                            cursor.execute(truncate_sql)
+                            if logger:
+                                logger.info(f"Table {schema}.{table} truncated")
 
                         with open(csv_file, "r", encoding="utf-8") as f:
                             header_line = f.readline().strip()
