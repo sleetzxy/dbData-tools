@@ -44,6 +44,8 @@ def migrate_tables(
             "total_rows": int,
         }
     """
+    _log = logger or logging.getLogger(__name__)
+
     result: Dict[str, Any] = {
         "success": True,
         "migrated_tables": [],
@@ -90,10 +92,12 @@ def migrate_tables(
                     include_header=True,
                     logger=logger,
                 )
-                if not export_result.get("success", True) and export_result.get("error_tables"):
-                    raise RuntimeError(
-                        export_result["error_tables"][0].get("error", "导出失败")
+                if not export_result.get("success", True):
+                    err = (
+                        (export_result.get("error_tables") or [{}])[0].get("error")
+                        or export_result.get("error", "导出失败")
                     )
+                    raise RuntimeError(err)
 
                 exported = export_result.get("exported_tables", [])
                 row_count = exported[0].get("rows", 0) if exported else 0
@@ -108,20 +112,21 @@ def migrate_tables(
                     truncate_before=truncate_before,
                     logger=logger,
                 )
-                if not import_result.get("success", True) and import_result.get("error_tables"):
-                    err = import_result["error_tables"][0]
-                    raise RuntimeError(err.get("error", "导入失败"))
+                if not import_result.get("success", True):
+                    err_tables = import_result.get("error_tables") or []
+                    err = (
+                        err_tables[0].get("error") if err_tables else None
+                    ) or import_result.get("error", "导入失败")
+                    raise RuntimeError(err)
 
                 result["migrated_tables"].append({"name": table, "rows": row_count})
                 result["total_rows"] += row_count
 
-                if logger:
-                    logger.info(f"表 {table} 迁移完成，共 {row_count} 行")
+                _log.info(f"表 {table} 迁移完成，共 {row_count} 行")
 
             except Exception as exc:
                 error_msg = str(exc)
-                if logger:
-                    logger.error(f"表 {table} 迁移失败: {error_msg}")
+                _log.error(f"表 {table} 迁移失败: {error_msg}")
                 result["error_tables"].append({"name": table, "error": error_msg})
                 result["success"] = False
             finally:
@@ -129,8 +134,7 @@ def migrate_tables(
 
     except Exception as exc:
         error_msg = f"迁移过程发生错误: {exc}"
-        if logger:
-            logger.error(error_msg)
+        _log.error(error_msg)
         result["success"] = False
         result["error"] = error_msg
     finally:
