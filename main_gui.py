@@ -7,6 +7,8 @@ from gui.pages.csv.exporter import ExportCsvApp
 from gui.pages.csv.importer import ImportCsvApp
 from gui.pages.csv.updater import UpdateCsvApp
 from gui.pages.database.exporter import ExportDbApp
+from gui.pages.database.migrator import MigratorPage
+from gui.pages.database.migrator import MigratorPage
 from gui.pages.management.connection import ConnectionManager
 from gui.pages.csv.importer_type import ImportCsvTypeApp
 # 新增：引入公共主题与滚动条样式方法
@@ -320,6 +322,7 @@ class MainApplication:
             ("📝", "CSV导入（指定类型）", self.load_importer_type),
             ("📤", "CSV导出", self.load_exporter),
             ("📦", "数据库导出", self.load_db_exporter),
+            ("🔁", "数据迁移", self.load_migrator),
             ("🔄", "CSV加解密", self.load_updater),
         ]
         
@@ -448,6 +451,16 @@ class MainApplication:
     def get_changelog_data(self):
         """获取更新日志数据"""
         return [
+            {
+                "version": "1.4.0",
+                "date": "2026-04-02",
+                "changes": [
+                    "新增数据迁移功能，支持指定多表从源库迁移到目标库",
+                    "支持 PostgreSQL 与 ClickHouse 同构及异构迁移",
+                    "可选迁移前清空目标表（TRUNCATE）"
+                ],
+                "color": self.idea_dark_colors["accent"]
+            },
             {
                 "version": "1.3.0",
                 "date": "2026-03-26",
@@ -714,7 +727,15 @@ class MainApplication:
         if btn:
             btn.configure(fg_color=self.idea_dark_colors["button_hover"])
         self._show_page('exporter_db', builder=lambda parent: ExportDbApp(parent))
-        
+
+    def load_migrator(self):
+        """加载数据迁移工具（持久化页面切换）"""
+        self._reset_menu_buttons()
+        btn = self.command_to_button.get('load_migrator')
+        if btn:
+            btn.configure(fg_color=self.idea_dark_colors["button_hover"])
+        self._show_page('migrator', builder=lambda parent: MigratorPage(parent))
+
     def clear_content(self):
         """清空内容区域（不销毁，仅隐藏以避免Tk命令失效）"""
         for widget in self.content_frame.winfo_children():
