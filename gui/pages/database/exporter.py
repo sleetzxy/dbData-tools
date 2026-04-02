@@ -49,7 +49,7 @@ class ExportDbPage(BaseToolPage):
         self.connection_menu = self.connection_selector.connection_menu
 
         # 排除表名
-        exclude_label = StyledLabel(parent, text="排除的表名（多个用英文逗号分隔）")
+        exclude_label = StyledLabel(parent, text="排除的表名（多个表可用逗号分隔）")
         exclude_label.pack(anchor='w', pady=(0, 3))
 
         # 排除表名文本框容器

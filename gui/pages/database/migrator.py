@@ -50,7 +50,7 @@ class MigratorPage(BaseToolPage):
         self.connection_menu = self.src_selector.connection_menu
 
         # 表名输入
-        StyledLabel(parent, text="迁移的表名（多个用逗号或换行分隔）").pack(
+        StyledLabel(parent, text="迁移的表名（多个表可用逗号分隔）").pack(
             anchor="w", pady=(0, 3)
         )
         table_container = self.ctk.CTkFrame(

@@ -35,7 +35,7 @@ class ExportCsvPage(BaseToolPage):
         self.connection_var = self.connection_selector.connection_var
         self.connection_menu = self.connection_selector.connection_menu
 
-        tables_label = StyledLabel(parent, text="要导出的表名（多个表可用逗号或换行分隔）")
+        tables_label = StyledLabel(parent, text="要导出的表名（多个表可用逗号分隔）")
         tables_label.pack(anchor="w", pady=(0, 3))
 
         tables_container = self.ctk.CTkFrame(
