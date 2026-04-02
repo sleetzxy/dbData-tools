@@ -6,7 +6,7 @@ from tkinter import messagebox
 
 from gui.base import BaseToolPage
 from gui.components import ConnectionSelector
-from gui.widgets.labels import TitleLabel, StyledLabel
+from gui.widgets.labels import TitleLabel, StyledLabel  # StyledLabel used in table input label
 from gui.widgets.buttons import PrimaryButton
 from gui.widgets.scrolled_texts import StyledScrolledText
 from core.migrator import migrate_tables
@@ -35,16 +35,14 @@ class MigratorPage(BaseToolPage):
 
     def setup_left_panel_content(self, parent):
         """设置左侧面板内容"""
-        TitleLabel(parent, text="🔁 数据迁移").pack(anchor="w", pady=(0, 15))
+        TitleLabel(parent, text="🔀 数据迁移").pack(anchor="w", pady=(0, 15))
 
         # 源数据库连接
-        StyledLabel(parent, text="源数据库连接").pack(anchor="w", pady=(0, 3))
-        self.src_selector = ConnectionSelector(parent, label_text="")
-        self.src_selector.pack(fill="x", pady=(0, 15))
+        self.src_selector = ConnectionSelector(parent, label_text="源数据库连接")
+        self.src_selector.pack(fill="x", pady=(0, 10))
 
         # 目标数据库连接
-        StyledLabel(parent, text="目标数据库连接").pack(anchor="w", pady=(0, 3))
-        self.dst_selector = ConnectionSelector(parent, label_text="")
+        self.dst_selector = ConnectionSelector(parent, label_text="目标数据库连接")
         self.dst_selector.pack(fill="x", pady=(0, 15))
 
         # 兼容 ConnectionMixin 引用（以 src 为默认连接引用）
@@ -120,6 +118,27 @@ class MigratorPage(BaseToolPage):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"加载配置失败: {e}")
+
+    def update_connections_combobox(self):
+        """重写：同时刷新源库和目标库两个下拉框"""
+        super().update_connections_combobox()
+        # dst_selector 在 setup_left_panel_content 之后才存在
+        if not hasattr(self, "dst_selector"):
+            return
+        if not self.connections:
+            self.dst_selector.set_values(["无可用连接"])
+            return
+        names = [
+            f"{c.get('name', '未命名连接')} ({c.get('host', '')}:{c.get('port', '')})"
+            for c in self.connections
+        ]
+        current = self.dst_selector.connection_var.get()
+        self.dst_selector.connection_menu.configure(values=names)
+        if current in names:
+            self.dst_selector.connection_menu.set(current)
+        else:
+            self.dst_selector.connection_menu.set(names[0])
+            self.dst_selector.connection_var.set(names[0])
 
     def _get_connection_config_by_selector(self, selector):
         """根据 selector 的选中值查找连接配置"""

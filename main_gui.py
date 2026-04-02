@@ -322,7 +322,7 @@ class MainApplication:
             ("📝", "CSV导入（指定类型）", self.load_importer_type),
             ("📤", "CSV导出", self.load_exporter),
             ("📦", "数据库导出", self.load_db_exporter),
-            ("🔁", "数据迁移", self.load_migrator),
+            ("🔀", "数据迁移", self.load_migrator),
             ("🔄", "CSV加解密", self.load_updater),
         ]
         
