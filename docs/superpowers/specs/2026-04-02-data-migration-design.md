@@ -38,6 +38,25 @@
 
 ---
 
+## 2.1 关键技术约束
+
+经代码核查，两个 adapter 的 `import_csv` 方法当前都**无条件执行 TRUNCATE**，不支持追加模式。因此需要对两个 adapter 做小幅改动，新增 `truncate_before` 参数（默认 `True`，向后兼容现有调用）：
+
+```python
+# PostgreSQLAdapter.import_csv 和 ClickHouseAdapter.import_csv 均需新增参数
+def import_csv(self, client, db_config, table_names, data_dir,
+               schema="", pre_sql_file="", need_backup=False,
+               truncate_before: bool = True, logger=None) -> dict:
+    ...
+    # 原有 TRUNCATE 逻辑改为条件执行
+    if truncate_before:
+        # 执行 TRUNCATE
+```
+
+migrator 将用户选择的 `truncate_before` 标志透传给 `import_csv`。
+
+---
+
 ## 3. 新增文件
 
 | 文件路径 | 说明 |
@@ -51,6 +70,8 @@
 
 | 文件路径 | 改动内容 |
 |---|---|
+| `db/adapters/postgresql_adapter.py` | `import_csv` 新增 `truncate_before: bool = True` 参数，原 TRUNCATE 逻辑改为条件执行 |
+| `db/adapters/clickhouse_adapter.py` | 同上 |
 | `main_gui.py` | 导入 MigratorPage；在工具按钮列表添加 🔁 按钮；添加 `load_migrator()` 方法；更新 `get_changelog_data()` 新增 v1.4.0 条目 |
 | `README.md` | 在功能列表中补充数据迁移说明 |
 
@@ -81,18 +102,19 @@ def migrate_tables(
 }
 ```
 
-### 执行步骤（逐表循环）
+### 执行步骤
 
-1. 创建系统临时目录（`tempfile.mkdtemp()`）
-2. 对每张表：
-   a. 连接源库，调用 `src_adapter.export_csv()` 将数据写入临时目录
-   b. 连接目标库
-   c. 若 `truncate_before=True`，执行 TRUNCATE（通过 `import_csv` 的 need_truncate 参数透传，或在 migrator 层直接执行）
-   d. 调用 `dst_adapter.import_csv()` 从临时目录导入数据
-   e. 删除该表的临时 CSV 文件
-   f. 记录成功/失败结果
-3. 清理临时目录
-4. 返回汇总结果
+1. 校验 `table_names` 非空，否则立即返回错误
+2. 创建系统临时目录（`tempfile.mkdtemp()`）
+3. **在循环外**一次性建立源库连接（`src_handle`）和目标库连接（`dst_handle`）
+4. 对每张表循环：
+   a. 调用 `src_adapter.export_csv(src_handle.client, src_config, [table], tmp_dir, ...)` 导出到临时目录
+   b. 调用 `dst_adapter.import_csv(dst_handle.client, dst_config, [table], tmp_dir, truncate_before=truncate_before, ...)` 导入
+   c. 删除该表的临时 CSV 文件
+   d. 记录成功行数或失败原因
+5. 关闭源库和目标库连接
+6. 清理临时目录（`shutil.rmtree`，忽略错误）
+7. 返回汇总结果
 
 ### 错误处理
 
