@@ -371,6 +371,8 @@ class PostgreSQLAdapter:
             return result
 
         try:
+            if client.status != psycopg2.extensions.STATUS_READY:
+                client.rollback()
             client.autocommit = False
 
             before_counts = self._get_table_counts(client, schema, table_names, logger)

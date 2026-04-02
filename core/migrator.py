@@ -11,8 +11,10 @@ import os
 import shutil
 import tempfile
 from typing import Any, Dict, List, Optional
+from utils.logger_factory import get_logger
 
-logger = logging.getLogger(__name__)
+LOGGER_NAME = "migrate"
+logger = get_logger(LOGGER_NAME)
 
 
 def migrate_tables(

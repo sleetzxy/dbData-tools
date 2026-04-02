@@ -9,10 +9,7 @@ from gui.components import ConnectionSelector
 from gui.widgets.labels import TitleLabel, StyledLabel  # StyledLabel used in table input label
 from gui.widgets.buttons import PrimaryButton
 from gui.widgets.scrolled_texts import StyledScrolledText
-from core.migrator import migrate_tables
-import logging
-
-logger = logging.getLogger(__name__)
+from core.migrator import migrate_tables, logger as core_logger
 
 
 class MigratorPage(BaseToolPage):
@@ -30,7 +27,7 @@ class MigratorPage(BaseToolPage):
             root=root,
             config_file=self.CONFIG_FILE,
             log_title="📋 迁移日志",
-            core_logger=logger,
+            core_logger=core_logger
         )
 
     def setup_left_panel_content(self, parent):
