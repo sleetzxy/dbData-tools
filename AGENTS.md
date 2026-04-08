@@ -38,7 +38,7 @@
 - 快速语法检查：`python -m compileall core db gui utils main_gui.py`
 - 运行测试：`pytest`
 - 打包单文件程序：
-  `pyinstaller --clean --onefile --windowed --uac-admin --name "PostgreSQL数据工具集" .\main_gui.py`
+  `pyinstaller --clean --onefile --windowed --uac-admin --name "DB数据工具集" .\main_gui.py`
 
 推荐顺序：
 1. 先执行 `python -m compileall core db gui utils main_gui.py`

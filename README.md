@@ -152,7 +152,7 @@ dbData-tools/
 
 ## 打包为可执行文件
 
-使用 PyInstaller 将应用打包为 Windows 单文件程序（无需安装 Python）：
+使用 PyInstaller 将应用打包为 Windows 单文件程序：
 
 ```bash
 pyinstaller --clean --onefile --windowed --uac-admin --name "DB数据工具集" .\main_gui.py
