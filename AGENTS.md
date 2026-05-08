@@ -3,6 +3,17 @@
 ## 项目概览
 这是一个基于 Tkinter 的 PostgreSQL 数据工具桌面应用，主要面向日常的数据导入、导出、更新与迁移场景。默认入口文件是 `main_gui.py`。改动时优先保持现有交互方式、页面组织和桌面端使用习惯的一致性。
 
+## 规范来源（AGENTS 与 Cursor Rules 的关系）
+本仓库有两层规范，**两层都要遵守**：
+
+1. **`.cursor/rules/*.mdc`（团队通用规范，权威）** — 由 Cursor 自动注入对应文件类型，**任何冲突以这里为准**：
+   - [`.cursor/rules/python.mdc`](.cursor/rules/python.mdc)：Python 代码风格、类型标注、PEP 8、`src/` 布局、依赖与测试管理等。
+   - [`.cursor/rules/pytest.mdc`](.cursor/rules/pytest.mdc)：pytest 项目结构、命名、fixture、mock、覆盖率等。
+   - [`.cursor/rules/git-commit-conventions.mdc`](.cursor/rules/git-commit-conventions.mdc)：Angular 风格 commit message、AI 辅助标注、合并策略等。
+2. **`AGENTS.md`（本文件，仓库专属补充）** — 仅记录本仓库的目录结构、命令、流程与术语等无法在通用 .mdc 里描述的约定。
+
+> 简单原则：**风格/格式细则查 .mdc；本仓库特有的目录、命令、流程查 AGENTS.md。** 若发现两边对同一件事说法不一致，以 `.cursor/rules` 为准并顺手把 AGENTS.md 修齐。
+
 ## 目录结构
 - `main_gui.py`：应用入口（仓库根），负责启动主界面与页面装配。
 - `pyproject.toml`：项目元数据与依赖（权威来源）。
@@ -30,13 +41,12 @@
 - 新增功能时先复用已有模块和模式，再考虑扩展目录结构，避免重复造轮子。
 - 涉及配置、日志、连接信息时，统一走 `utils/` 或现有配置入口，不要在页面文件中硬编码路径、库名、账号规则等信息。
 
-## 代码风格
-- 使用 Python 标准 4 空格缩进。
-- 文件名使用小写加下划线，例如 `exporter_csv.py`。
-- 类名使用 PascalCase，例如 `ImportCsvApp`。
-- 函数、变量、模块级辅助方法统一使用 snake_case。
-- 注释以解释“为什么这样做”为主，避免重复代码字面含义。
-- 保持 Tkinter 界面代码清晰可读；较长页面逻辑应主动拆分为辅助方法或可复用组件。
+## 代码风格（仓库专属补充）
+> 通用 Python 代码风格（PEP 8、命名规则、类型标注、文档字符串、import 顺序等）见 [`.cursor/rules/python.mdc`](.cursor/rules/python.mdc)，本节只列与本仓库相关的细节。
+
+- 现有类名沿用历史 PascalCase，例如 `ImportCsvApp`、`ExportDbApp`、`MigratorPage`；新增类与之保持风格一致。
+- Tkinter 界面代码以可读为先，较长页面逻辑主动拆分为辅助方法或挪到 `gui/components/` / `gui/widgets/`，不要在 `main_gui.py` 与单个 `pages/` 文件里堆。
+- 注释以解释「为什么这样做」为主（业务上下文、规避的坑），避免重复代码字面含义。
 
 ## 常用命令
 - **一次性**环境准备（仅首次创建 venv / 依赖或包发现规则有变更时重跑）：
@@ -56,10 +66,12 @@
 5. 仅在需要发布安装包时再运行 `pyinstaller`
 
 ## 变更与验证要求
+> 通用测试规范（fixture、参数化、mock、覆盖率等）见 [`.cursor/rules/pytest.mdc`](.cursor/rules/pytest.mdc)。
+
 - 每次改动都要提供可重复的验证方式；如果无法补自动化测试，至少说明手工验证步骤。
-- 优先为可独立验证的逻辑补测试，测试文件命名建议为 `tests/test_<module>.py`。
+- 优先为可独立验证的逻辑补测试，测试文件命名为 `tests/test_<module>.py`。
 - 提交前至少完成以下检查：
-  1. `python -m compileall core db gui utils main_gui.py`
+  1. `python -m compileall src/core src/db src/gui src/utils main_gui.py`
   2. 运行受影响范围内的 `pytest` 用例；如果当前改动没有对应自动化测试，需说明原因
   3. 启动 `python main_gui.py`，验证受影响页面或流程
 - 如果改动涉及导入导出、数据库更新或迁移流程，应尽量补充异常分支和空数据场景的验证。
