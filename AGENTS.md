@@ -76,14 +76,15 @@
   3. 启动 `python main_gui.py`，验证受影响页面或流程
 - 如果改动涉及导入导出、数据库更新或迁移流程，应尽量补充异常分支和空数据场景的验证。
 
-## Git 与提交规范
-- 一次提交只处理一个主题，避免把无关修改混在一起。
-- `git commit` 提交信息采用“英文类型 + 中文描述”的格式，且保持简洁明确，推荐写成 `type: 描述`。
-- 推荐示例：
+## Git 与提交规范（仓库专属补充）
+> 完整的 commit message 结构、type 取值、AI 辅助标注（`AI-Assisted-by`、`Co-authored-by`）等见 [`.cursor/rules/git-commit-conventions.mdc`](.cursor/rules/git-commit-conventions.mdc)，本节只补充仓库特有约定。
+
+- 提交信息采用「英文 type + 中文描述」的简洁形式，例如：
   - `fix: 解决 CSV 导出编码异常`
   - `refactor: 调整连接配置校验提示`
   - `docs: 重写仓库协作说明`
-- 提交前确认未误带 `build/`、`dist/`、`__pycache__/`、`.pytest_cache/` 等本地产物。
+- 一次提交只处理一个主题，避免把无关修改混在一起。
+- 提交前确认未误带 `build/`、`dist/`、`__pycache__/`、`.pytest_cache/`、`*.egg-info/` 等本地产物。
 - 如需合并到主干，先确保当前分支验证通过，再执行合并，避免把未验证修改带入主分支。
 
 ## 打包与产物管理

@@ -1,4 +1,4 @@
-﻿from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from db.connection import close_connection, create_connection, get_db_type
 from utils.logger_factory import get_logger
@@ -15,6 +15,7 @@ def export_database_to_sql(
     include_truncate: bool = True,
 ) -> Dict[str, Any]:
     """Export database to SQL using adapter dispatch."""
+    conn = None
     try:
         conn = create_connection(db_config, logger)
         if not conn:
