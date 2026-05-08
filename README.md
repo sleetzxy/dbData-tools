@@ -1,5 +1,7 @@
 # DB 数据工具集
 
+> **依赖权威来源为 `pyproject.toml`，`requirements.txt` 仅为镜像，过渡期保留。**
+
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.8%2B-blue?logo=python" alt="Python">
   <img src="https://img.shields.io/badge/GUI-Tkinter-informational" alt="Tkinter">

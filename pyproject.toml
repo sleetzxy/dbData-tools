@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dbdata-tools"
+version = "1.4.0"
+description = "基于 Tkinter 的 PostgreSQL 数据工具桌面应用"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "customtkinter==5.2.2",
+  "psycopg2-binary==2.9.11",
+  "pypinyin==0.55.0",
+  "pyzipper==0.3.6",
+  "clickhouse-connect==0.8.18",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.0.2",
+  "pytest-mock>=3.12",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "db*", "gui*", "utils*"]
+exclude = ["tests*", "build*", "dist*", "docs*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
