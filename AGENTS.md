@@ -39,10 +39,12 @@
 - 保持 Tkinter 界面代码清晰可读；较长页面逻辑应主动拆分为辅助方法或可复用组件。
 
 ## 常用命令
-- 准备环境：`python -m venv .venv` → `.\.venv\Scripts\Activate.ps1` → `pip install -e ".[dev]"`
-- 启动应用：`python main_gui.py`
-- 快速语法检查：`python -m compileall src/core src/db src/gui src/utils main_gui.py`
-- 运行测试：`pytest`（前提：已 `pip install -e ".[dev]"`，包从 `src/` 注册到当前虚拟环境）
+- **一次性**环境准备（仅首次创建 venv / 依赖或包发现规则有变更时重跑）：
+  `python -m venv .venv` → `.\.venv\Scripts\Activate.ps1` → `pip install -e ".[dev]"`
+- 日常启动与测试（仅需激活 venv，不要每次都跑可编辑安装）：
+  - 启动应用：`python main_gui.py`
+  - 快速语法检查：`python -m compileall src/core src/db src/gui src/utils main_gui.py`
+  - 运行测试：`pytest`
 - 打包单文件程序：
   `pyinstaller --clean --onefile --windowed --uac-admin --paths src --name "DB数据工具集" .\main_gui.py`
 

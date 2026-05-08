@@ -61,7 +61,7 @@
 - Python 3.10+
 - Windows 10/11（Tkinter 已内置于标准 Python 发行版）
 
-### 准备环境与安装依赖
+### 一次性环境准备（首次 / 新机器 / 重建 venv 时执行）
 
 使用虚拟环境 + 可编辑安装（依赖以 `pyproject.toml` 为准）：
 
@@ -72,17 +72,15 @@ python -m pip install -U pip
 pip install -e ".[dev]"
 ```
 
-### 启动应用
+> **`pip install -e .` 是一次性安装**，安装后 venv 即长期识别 `from core ...` / `from gui ...` 等导入。仅在以下场景需要重跑：① `pyproject.toml` 的依赖或包发现规则改动；② 删除或重建过 `src/dbdata_tools.egg-info/`；③ 换到新机器 / 新 venv。日常启动应用与跑测试都**不需要**先跑它。
+
+### 日常启动与测试（仅需激活 venv）
 
 ```powershell
-python main_gui.py
-```
-
-### 测试与编译检查
-
-```powershell
-pytest
-python -m compileall src/core src/db src/gui src/utils main_gui.py
+.\.venv\Scripts\Activate.ps1
+python main_gui.py                       # 启动 GUI
+pytest                                   # 运行测试
+python -m compileall src/core src/db src/gui src/utils main_gui.py   # 语法检查
 ```
 
 ---
