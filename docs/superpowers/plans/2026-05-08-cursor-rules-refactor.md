@@ -92,9 +92,29 @@ testpaths = ["tests"]
 addopts = "-q"
 ```
 
-- [ ] **Step 2：与 `requirements.txt` 对齐**
+- [ ] **Step 2：与 `requirements.txt` 对齐（明确以 `pyproject.toml` 为权威）**
 
-确认 `requirements.txt` 中的版本与 `[project].dependencies` / `[project.optional-dependencies].dev` 一致；若已一致则保留 `requirements.txt` 一段时间（不删，避免外部脚本依赖中断），并在 README 中标注「权威来源为 `pyproject.toml`」。
+逐条核对包名与版本，规则：**以 `pyproject.toml` 为权威源**。若发现差异，**改 `requirements.txt`** 与 pyproject 一致，**不要**反向修改 pyproject。
+
+应对齐的包清单（与当前 `requirements.txt` 一致）：
+
+- `customtkinter==5.2.2`
+- `psycopg2-binary==2.9.11`
+- `pypinyin==0.55.0`
+- `pyzipper==0.3.6`
+- `clickhouse-connect==0.8.18`
+- `pytest==9.0.2`（dev）
+
+核对命令：
+
+```powershell
+Get-Content requirements.txt
+Select-String -Path pyproject.toml -Pattern "customtkinter|psycopg2|pypinyin|pyzipper|clickhouse-connect|pytest"
+```
+
+期望：两侧版本号一一对应；若不一致则只改 `requirements.txt`。
+
+保留 `requirements.txt` 一段时间（避免外部脚本依赖中断），并在 README 顶部加一句「**依赖权威来源为 `pyproject.toml`，`requirements.txt` 仅为镜像，过渡期保留**」。
 
 - [ ] **Step 3：本地干跑验证**
 
@@ -302,9 +322,14 @@ git commit -m "chore: 接入 Ruff/Black 最小可过子集"
 
 **Why:** Spec §3.1 要求文档化 venv、`pip install -e .`、pytest、可选 ruff 等命令。
 
-- [ ] **Step 1：在 README 顶部「快速开始」或同等小节追加：**
+- [ ] **Step 1a：在 `README.md` 中追加「快速开始」小节**
 
-```markdown
+要写入 README 的实际 Markdown 内容（请逐字粘贴，自行加节标题前的空行）：
+
+  - 标题：`## 快速开始`
+  - 紧随其后是一个 `powershell` 围栏代码块，内容如下（注意：在 README 里要写真实的三反引号；这里用四反引号外层包裹，避免本计划文档自身渲染断裂）：
+
+````markdown
 ## 快速开始
 
 ```powershell
@@ -314,14 +339,20 @@ python -m pip install -U pip
 pip install -e ".[dev]"
 python main_gui.py
 ```
+````
 
+- [ ] **Step 1b：在 `README.md` 中追加「测试与检查」小节**
+
+````markdown
 ## 测试与检查
 
 ```powershell
 pytest
 python -m compileall core db gui utils main_gui.py
 ```
-```
+````
+
+> 注：M2 完成后，`compileall` 命令会变为 `python -m compileall src/core src/db src/gui src/utils main_gui.py`（见 Task M2-4）。M1 阶段保持上面的写法即可。
 
 - [ ] **Step 2：在 `AGENTS.md` 的「常用命令」一节增加「准备环境」一条，并把「运行测试」更新为依赖于 `pip install -e ".[dev]"` 的版本。**
 
