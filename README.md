@@ -60,25 +60,33 @@
 
 ### 环境要求
 
-- Python 3.8+
+- Python 3.10+
 - Windows 10/11（Tkinter 已内置于标准 Python 发行版）
 
-### 安装依赖
+### 准备环境与安装依赖
 
-```bash
-pip install psycopg2-binary clickhouse-connect pyzipper
+推荐使用虚拟环境 + 可编辑安装（依赖以 `pyproject.toml` 为准）：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -U pip
+pip install -e ".[dev]"
 ```
 
-或使用 requirements.txt（如果已生成）：
-
-```bash
-pip install -r requirements.txt
-```
+> 仍保留的 `requirements.txt` 仅作为镜像，过渡期可继续使用 `pip install -r requirements.txt`，但新增/调整依赖请改 `pyproject.toml`。
 
 ### 启动应用
 
-```bash
+```powershell
 python main_gui.py
+```
+
+### 测试与编译检查
+
+```powershell
+pytest
+python -m compileall core db gui utils main_gui.py
 ```
 
 ---

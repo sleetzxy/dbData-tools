@@ -34,17 +34,19 @@
 - 保持 Tkinter 界面代码清晰可读；较长页面逻辑应主动拆分为辅助方法或可复用组件。
 
 ## 常用命令
+- 准备环境：`python -m venv .venv` → `.\.venv\Scripts\Activate.ps1` → `pip install -e ".[dev]"`
 - 启动应用：`python main_gui.py`
 - 快速语法检查：`python -m compileall core db gui utils main_gui.py`
-- 运行测试：`pytest`
+- 运行测试：`pytest`（依赖 `pip install -e ".[dev]"` 已完成；亦可 fallback 到仓库根直接运行）
 - 打包单文件程序：
   `pyinstaller --clean --onefile --windowed --uac-admin --name "DB数据工具集" .\main_gui.py`
 
 推荐顺序：
-1. 先执行 `python -m compileall core db gui utils main_gui.py`
-2. 再运行受影响的自动化测试，例如 `pytest` 或指定测试文件
-3. 然后执行 `python main_gui.py` 做手工回归
-4. 仅在需要发布安装包时再运行 `pyinstaller`
+1. 先确认已 `pip install -e ".[dev]"`（仅首次或依赖变更时）
+2. 执行 `python -m compileall core db gui utils main_gui.py`
+3. 运行受影响的自动化测试，例如 `pytest` 或指定测试文件
+4. 然后执行 `python main_gui.py` 做手工回归
+5. 仅在需要发布安装包时再运行 `pyinstaller`
 
 ## 变更与验证要求
 - 每次改动都要提供可重复的验证方式；如果无法补自动化测试，至少说明手工验证步骤。
