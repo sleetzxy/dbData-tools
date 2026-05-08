@@ -8,7 +8,6 @@ from gui.pages.csv.importer import ImportCsvApp
 from gui.pages.csv.updater import UpdateCsvApp
 from gui.pages.database.exporter import ExportDbApp
 from gui.pages.database.migrator import MigratorPage
-from gui.pages.database.migrator import MigratorPage
 from gui.pages.management.connection import ConnectionManager
 from gui.pages.csv.importer_type import ImportCsvTypeApp
 # 新增：引入公共主题与滚动条样式方法
