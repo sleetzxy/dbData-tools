@@ -863,7 +863,9 @@ def test_postgresql_import_rollback_clears_imported_tables(monkeypatch):
 
 
 def test_postgresql_import_uses_double_quote_escape():
-    source = Path("db/adapters/postgresql_adapter.py").read_text(encoding="utf-8")
+    from db.adapters import postgresql_adapter
+
+    source = Path(postgresql_adapter.__file__).read_text(encoding="utf-8")
     assert r"ESCAPE '\"'" in source
 
 

@@ -4,20 +4,24 @@
 这是一个基于 Tkinter 的 PostgreSQL 数据工具桌面应用，主要面向日常的数据导入、导出、更新与迁移场景。默认入口文件是 `main_gui.py`。改动时优先保持现有交互方式、页面组织和桌面端使用习惯的一致性。
 
 ## 目录结构
-- `main_gui.py`：应用入口，负责启动主界面与页面装配。
-- `core/`：核心业务逻辑，例如 CSV 导入、导出、更新、迁移等。
-- `db/`：数据库连接、SQL 执行及 PostgreSQL 相关访问能力。
-- `gui/`：界面层代码。
-  - `gui/base/`：页面或组件的基础类。
-  - `gui/components/`：可复用页面组件。
-  - `gui/pages/`：具体业务页面逻辑。
-  - `gui/styling/`：样式、主题和界面常量。
-  - `gui/widgets/`：通用控件封装。
-- `utils/`：配置、日志、公共辅助工具。
+- `main_gui.py`：应用入口（仓库根），负责启动主界面与页面装配。
+- `pyproject.toml`：项目元数据与依赖（权威来源）。
+- `src/`：可安装包源码根（通过 `pip install -e .` 注册到 venv）。
+  - `src/core/`：核心业务逻辑，例如 CSV 导入、导出、更新、迁移等。
+  - `src/db/`：数据库连接、SQL 执行及 PostgreSQL / ClickHouse 适配。
+  - `src/gui/`：界面层代码。
+    - `src/gui/base/`：页面或组件的基础类。
+    - `src/gui/components/`：可复用页面组件。
+    - `src/gui/pages/`：具体业务页面逻辑。
+    - `src/gui/styling/`：样式、主题和界面常量。
+    - `src/gui/widgets/`：通用控件封装。
+  - `src/utils/`：配置、日志、公共辅助工具。
 - `tests/`：自动化测试；新增可测试逻辑时，优先补到这里。
 - `docs/`：补充文档与说明材料。
 - `build/`、`dist/`：打包产物目录，不作为日常手工修改目标。
 - `__pycache__/`、`.pytest_cache/`：本地产物目录，不应作为有效改动提交。
+
+> 业务代码导入仍按包名书写：`from core...`、`from db...`、`from gui...`、`from utils...`，不要写成 `from src.core...`。
 
 ## 开发原则
 - 优先把业务逻辑放在 `core/`、`db/`、`utils/`，尽量减少页面事件处理函数里堆叠复杂逻辑。
@@ -36,14 +40,14 @@
 ## 常用命令
 - 准备环境：`python -m venv .venv` → `.\.venv\Scripts\Activate.ps1` → `pip install -e ".[dev]"`
 - 启动应用：`python main_gui.py`
-- 快速语法检查：`python -m compileall core db gui utils main_gui.py`
-- 运行测试：`pytest`（依赖 `pip install -e ".[dev]"` 已完成；亦可 fallback 到仓库根直接运行）
+- 快速语法检查：`python -m compileall src/core src/db src/gui src/utils main_gui.py`
+- 运行测试：`pytest`（前提：已 `pip install -e ".[dev]"`，包从 `src/` 注册到当前虚拟环境）
 - 打包单文件程序：
-  `pyinstaller --clean --onefile --windowed --uac-admin --name "DB数据工具集" .\main_gui.py`
+  `pyinstaller --clean --onefile --windowed --uac-admin --paths src --name "DB数据工具集" .\main_gui.py`
 
 推荐顺序：
 1. 先确认已 `pip install -e ".[dev]"`（仅首次或依赖变更时）
-2. 执行 `python -m compileall core db gui utils main_gui.py`
+2. 执行 `python -m compileall src/core src/db src/gui src/utils main_gui.py`
 3. 运行受影响的自动化测试，例如 `pytest` 或指定测试文件
 4. 然后执行 `python main_gui.py` 做手工回归
 5. 仅在需要发布安装包时再运行 `pyinstaller`

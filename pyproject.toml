@@ -23,9 +23,8 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["core*", "db*", "gui*", "utils*"]
-exclude = ["tests*", "build*", "dist*", "docs*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -86,7 +86,7 @@ python main_gui.py
 
 ```powershell
 pytest
-python -m compileall core db gui utils main_gui.py
+python -m compileall src/core src/db src/gui src/utils main_gui.py
 ```
 
 ---
@@ -95,36 +95,41 @@ python -m compileall core db gui utils main_gui.py
 
 ```
 dbData-tools/
-├── main_gui.py              # 应用入口，初始化主窗口与标签页
-├── core/                    # 业务逻辑层（与 GUI 解耦）
-│   ├── importer_csv.py      # CSV / ZIP 导入核心逻辑
-│   ├── importer_csv_type.py # 类型推断导入
-│   ├── exporter_csv.py      # CSV 导出
-│   ├── exporter_db.py       # 数据库 SQL 导出
-│   └── updater_csv.py       # CSV 批量更新
-├── db/                      # 数据库连接与适配器
-│   ├── connection.py        # 统一连接入口
-│   └── adapters/
-│       ├── postgresql_adapter.py
-│       └── clickhouse_adapter.py
-├── gui/                     # 界面层
-│   ├── pages/               # 各功能页面
-│   │   ├── csv/             # CSV 相关页面
-│   │   ├── database/        # 数据库导出页面
-│   │   └── management/      # 连接管理页面
-│   ├── base/                # 页面基类与 Mixin
-│   ├── components/          # 可复用组件（连接选择器、路径选择器）
-│   ├── widgets/             # 基础控件封装
-│   ├── styling/             # 主题与样式
-│   └── utils/               # GUI 工具函数
-├── utils/                   # 通用工具
-│   ├── config_manager.py    # JSON 配置读写
-│   ├── logger_factory.py    # 日志工厂
-│   └── log_handler.py       # 自定义日志处理器
-├── tests/                   # 单元测试
-├── docs/                    # 设计文档与规划
-└── AGENTS.md                # 项目开发规范
+├── main_gui.py                   # 应用入口（仓库根），初始化主窗口与标签页
+├── pyproject.toml                # 项目元数据与依赖（权威来源）
+├── src/                          # 可安装包源码根
+│   ├── core/                     # 业务逻辑层（与 GUI 解耦）
+│   │   ├── importer_csv.py       # CSV / ZIP 导入核心逻辑
+│   │   ├── importer_csv_type.py  # 类型推断导入
+│   │   ├── exporter_csv.py       # CSV 导出
+│   │   ├── exporter_db.py        # 数据库 SQL 导出
+│   │   ├── updater_csv.py        # CSV 批量更新
+│   │   └── migrator.py           # 数据迁移
+│   ├── db/                       # 数据库连接与适配器
+│   │   ├── connection.py         # 统一连接入口
+│   │   └── adapters/
+│   │       ├── postgresql_adapter.py
+│   │       └── clickhouse_adapter.py
+│   ├── gui/                      # 界面层
+│   │   ├── pages/                # 各功能页面
+│   │   │   ├── csv/              # CSV 相关页面
+│   │   │   ├── database/         # 数据库导出 / 迁移页面
+│   │   │   └── management/       # 连接管理页面
+│   │   ├── base/                 # 页面基类与 Mixin
+│   │   ├── components/           # 可复用组件（连接选择器、路径选择器）
+│   │   ├── widgets/              # 基础控件封装
+│   │   ├── styling/              # 主题与样式
+│   │   └── utils/                # GUI 工具函数
+│   └── utils/                    # 通用工具
+│       ├── config_manager.py     # JSON 配置读写
+│       ├── logger_factory.py     # 日志工厂
+│       └── log_handler.py        # 自定义日志处理器
+├── tests/                        # 单元测试
+├── docs/                         # 设计文档与规划
+└── AGENTS.md                     # 项目开发规范
 ```
+
+> 业务代码导入仍按包名书写：`from core...`、`from db...`、`from gui...`、`from utils...`，不要写成 `from src.core...`。
 
 ---
 
@@ -164,13 +169,13 @@ dbData-tools/
 
 使用 PyInstaller 将应用打包为 Windows 单文件程序：
 
-```bash
-pyinstaller --clean --onefile --windowed --uac-admin --name "DB数据工具集" .\main_gui.py
+```powershell
+pyinstaller --clean --onefile --windowed --uac-admin --paths src --name "DB数据工具集" .\main_gui.py
 ```
 
 打包完成后，可执行文件位于 `dist/` 目录。
 
-> **说明：** PyInstaller 规格文件已加入 `clickhouse_connect` hidden import，避免打包后 ClickHouse 连接不可用。
+> **说明：** `--paths src` 让 PyInstaller 能解析 `src/` 下的业务包；规格文件已加入 `clickhouse_connect` hidden import，避免打包后 ClickHouse 连接不可用。
 
 ---
 
@@ -178,9 +183,9 @@ pyinstaller --clean --onefile --windowed --uac-admin --name "DB数据工具集" 
 
 ### 本地运行与验证
 
-```bash
+```powershell
 # 1. 语法检查
-python -m compileall core db gui utils main_gui.py
+python -m compileall src/core src/db src/gui src/utils main_gui.py
 
 # 2. 启动 GUI 手工验证
 python main_gui.py
@@ -195,7 +200,7 @@ python -m pytest tests/
 - 文件名：`snake_case`（如 `exporter_csv.py`）
 - 类名：`PascalCase`（如 `ImportCsvApp`）
 - 函数/变量：`snake_case`
-- 业务逻辑放 `core/`，页面逻辑放 `gui/pages/`，勿堆入 `main_gui.py`
+- 业务逻辑放 `src/core/`，页面逻辑放 `src/gui/pages/`，勿堆入 `main_gui.py`
 
 ---
 
