@@ -1,0 +1,82 @@
+---
+description: Git 提交说明（约定式提交）+ AI 辅助与合著者标注
+alwaysApply: true
+---
+
+# Git Commit message 与 AI 辅助标注
+
+本规则参考 [Commit message 和 Change log 编写指南](https://www.ruanyifeng.com/blog/2016/01/commit_message_change_log.html) 中的 **Angular 约定式提交** 思路，并补充 **AI 辅助生成代码/文案时的披露与追溯**。
+
+## 提交粒度
+
+- 一次提交只处理一个主题，避免无关修改混在同一 commit。
+
+## 结构
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+- **Header** 必填；**Body**、**Footer** 按需。
+- 单行建议不超过 **72** 字符（或团队统一 **100**），避免自动换行难看。
+
+## Header
+
+- **type**（必选，常用）：`feat` | `fix` | `docs` | `style` | `refactor` | `test` | `chore`  
+  - `feat`、`fix` 通常进入 Change log；其余是否写入由发布策略决定。
+- **scope**（可选）：影响范围，如 `gui`、`core`、`db`、具体模块名。
+- **subject**（必选）：简短说明目的，建议 **≤50** 字符。  
+  - 动词开头、**第一人称现在时**（如 `add` 而非 `added`）。  
+  - **首字母小写**，**句末不加句号**。  
+  - 可与中文混用，例如：`fix(csv): 解决导出编码异常`。
+
+## Body
+
+- 说明**动机**、与**之前行为**的对比；可分段、可用列表。
+- 语态与 subject 一致：**现在时**。
+
+## Footer
+
+- **破坏性变更**：以 `BREAKING CHANGE:` 开头，说明变更与迁移方式。
+- **关联 Issue**：`Closes #123`（可多号）。
+- **撤销提交**：Header 以 `revert:` 开头；Body 固定含 `This reverts commit <hash>.`。
+
+## AI 辅助提交（补充在 Body 或 Footer）
+
+当本次变更有 AI（如 Cursor）参与起草、重构建议或生成片段时，在 **Body** 中用条目写清**人工作出的关键修改**；在 **Footer** 用固定字段做**工具与批次追溯**（便于审计与合规）。
+
+示例（字段名可照搬，值按实际填写）：
+
+```
+feat(auth): add jwt refresh token flow
+
+- Refactor session handling for clearer token lifecycle.
+- AI drafted initial refresh flow; human reviewed edge cases.
+- Manually add Redis cache for hot-path latency.
+
+AI-Assisted-by: Cursor
+Prompt-ID: PROMPT-AUTH-003
+Co-authored-by: Zhang San <zhangsan@company.com>
+```
+
+约定：
+
+- **AI-Assisted-by**：使用的工具或模型产品线名称（按团队清单填写）。
+- **Prompt-ID**：内部追踪 ID（无则可省略该行，勿编造）。
+- **Co-authored-by**：符合 [Git trailer 格式](https://git-scm.com/docs/git-interpret-trailers)；与 `git commit` 合著者惯例一致，**每行一人**。**必须**包含**本次 Git 提交人**（与 `git config user.name` / `user.email` 一致，通常即 Author）；另有合著者可追加多行。
+
+若 AI **仅**参与 commit message 润色、**未**参与代码：可在 Body 末行写 `AI used only for commit message wording.` 并视政策保留 `AI-Assisted-by`。
+
+## Change log 与发布
+
+- 可由符合上述 Header 的提交历史自动生成（如 conventional-changelog）；发布前仍可人工增补。
+- **AI 相关 trailer 一般不进用户面向的 Change log**，除非合规明确要求。
+
+## 本仓库提交前与合并
+
+- 确认未误带：`build/`、`dist/`、`__pycache__/`、`.pytest_cache/` 等本地产物。
+- 合并到主干前，先确保当前分支验证通过，再合并，避免未验证修改进入主分支。
