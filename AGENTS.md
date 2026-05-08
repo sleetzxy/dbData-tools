@@ -10,11 +10,12 @@
   - `src/core/`：核心业务逻辑，例如 CSV 导入、导出、更新、迁移等。
   - `src/db/`：数据库连接、SQL 执行及 PostgreSQL / ClickHouse 适配。
   - `src/gui/`：界面层代码。
+    - `src/gui/app.py`：主壳 `MainApplication`（菜单/侧栏/页面装配）。
     - `src/gui/base/`：页面或组件的基础类。
     - `src/gui/components/`：可复用页面组件。
     - `src/gui/pages/`：具体业务页面逻辑。
     - `src/gui/styling/`：样式、主题和界面常量。
-    - `src/gui/widgets/`：通用控件封装。
+    - `src/gui/widgets/`：通用控件封装（含 `tooltip.py` 工具提示管理器）。
   - `src/utils/`：配置、日志、公共辅助工具。
 - `tests/`：自动化测试；新增可测试逻辑时，优先补到这里。
 - `docs/`：补充文档与说明材料。
@@ -25,7 +26,7 @@
 
 ## 开发原则
 - 优先把业务逻辑放在 `core/`、`db/`、`utils/`，尽量减少页面事件处理函数里堆叠复杂逻辑。
-- 页面级逻辑放在 `gui/pages/`，可复用 UI 能力放在 `gui/components/` 或 `gui/widgets/`，不要持续把实现细节堆回 `main_gui.py`。
+- 页面级逻辑放在 `gui/pages/`，可复用 UI 能力放在 `gui/components/` 或 `gui/widgets/`；主壳装配放在 `gui/app.py`，`main_gui.py` 仅作为薄入口（创建根窗口、实例化 `MainApplication`、`mainloop`），不要把实现细节堆回去。
 - 新增功能时先复用已有模块和模式，再考虑扩展目录结构，避免重复造轮子。
 - 涉及配置、日志、连接信息时，统一走 `utils/` 或现有配置入口，不要在页面文件中硬编码路径、库名、账号规则等信息。
 

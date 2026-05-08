@@ -111,13 +111,14 @@ dbData-tools/
 │   │       ├── postgresql_adapter.py
 │   │       └── clickhouse_adapter.py
 │   ├── gui/                      # 界面层
+│   │   ├── app.py                # 主壳 MainApplication
 │   │   ├── pages/                # 各功能页面
 │   │   │   ├── csv/              # CSV 相关页面
 │   │   │   ├── database/         # 数据库导出 / 迁移页面
 │   │   │   └── management/       # 连接管理页面
 │   │   ├── base/                 # 页面基类与 Mixin
 │   │   ├── components/           # 可复用组件（连接选择器、路径选择器）
-│   │   ├── widgets/              # 基础控件封装
+│   │   ├── widgets/              # 基础控件封装（含 tooltip 工具提示管理器）
 │   │   ├── styling/              # 主题与样式
 │   │   └── utils/                # GUI 工具函数
 │   └── utils/                    # 通用工具
