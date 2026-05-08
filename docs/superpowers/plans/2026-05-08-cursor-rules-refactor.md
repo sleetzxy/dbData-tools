@@ -127,12 +127,19 @@ pip install -e ".[dev]"
 
 期望：安装成功，`pip show dbdata-tools` 能查到版本 1.4.0。
 
-- [ ] **Step 4：commit**
+- [ ] **Step 4：commit（覆盖本 Task 中所有改动）**
+
+把 Step 1（新建 `pyproject.toml`）与 Step 2 中可能产生的改动一并入库：`pyproject.toml`、若被同步过的 `requirements.txt`、以及在 README 顶部追加的「权威来源」一句。
 
 ```powershell
+git status                    # 确认实际变更
 git add pyproject.toml
-git commit -m "chore: 引入 pyproject.toml 描述项目元数据与依赖"
+git add requirements.txt   # 仅当 Step 2 同步修改了它时
+git add README.md          # 仅当 Step 2 在 README 顶部追加了说明时
+git commit -m "chore: 引入 pyproject.toml 并对齐 requirements"
 ```
+
+> 若 Step 2 中 `requirements.txt` 和 README 都未发生改动，则只 `git add pyproject.toml`。**总原则：每个 Task 以一次干净的 commit 收尾，不要把本 Task 的零散改动遗留到下一个 Task。**
 
 ---
 
