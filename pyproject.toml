@@ -29,3 +29,11 @@ include = ["core*", "db*", "gui*", "utils*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+# Pyright / Pylance（IDE 静态分析）：让 IDE 知道业务包在 src/ 下，
+# 即便没有 pip install -e . 也能正确解析 from core.../from gui... 等导入。
+[tool.pyright]
+include = ["src", "tests", "main_gui.py"]
+extraPaths = ["src"]
+venvPath = "."
+venv = ".venv"
