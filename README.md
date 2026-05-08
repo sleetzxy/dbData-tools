@@ -1,7 +1,5 @@
 # DB 数据工具集
 
-> **依赖权威来源为 `pyproject.toml`，`requirements.txt` 仅为镜像，过渡期保留。**
-
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.8%2B-blue?logo=python" alt="Python">
   <img src="https://img.shields.io/badge/GUI-Tkinter-informational" alt="Tkinter">
@@ -65,7 +63,7 @@
 
 ### 准备环境与安装依赖
 
-推荐使用虚拟环境 + 可编辑安装（依赖以 `pyproject.toml` 为准）：
+使用虚拟环境 + 可编辑安装（依赖以 `pyproject.toml` 为准）：
 
 ```powershell
 python -m venv .venv
@@ -73,8 +71,6 @@ python -m venv .venv
 python -m pip install -U pip
 pip install -e ".[dev]"
 ```
-
-> 仍保留的 `requirements.txt` 仅作为镜像，过渡期可继续使用 `pip install -r requirements.txt`，但新增/调整依赖请改 `pyproject.toml`。
 
 ### 启动应用
 
@@ -214,11 +210,7 @@ python -m pytest tests/
 | `pyzipper` | AES 加密 ZIP 解压 | `pip install pyzipper` |
 | `tkinter` | GUI 框架（Python 标准库内置） | — |
 
-完整依赖可通过以下命令生成：
-
-```bash
-pip freeze > requirements.txt
-```
+完整依赖以 `pyproject.toml` 为准，安装命令：`pip install -e ".[dev]"`。
 
 ---
 

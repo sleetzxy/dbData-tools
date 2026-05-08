@@ -30,6 +30,8 @@ wheels/
 tests/.pytest_tmp/
 tests/.tmp_imports/
 tests/.tmp_exports/
+# 测试用例传入字面量 "data_dir" 时由适配器 backup 流程创建
+data_dir/
 htmlcov/
 .coverage
 .coverage.*
