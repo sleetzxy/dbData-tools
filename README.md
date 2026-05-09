@@ -105,7 +105,7 @@ dbData-tools/
 │   │       ├── postgresql_adapter.py
 │   │       └── clickhouse_adapter.py
 │   ├── gui/                      # 界面层
-│   │   ├── app.py                # 主壳 MainApplication
+│   │   ├── app.py                # 主壳 MainApplication（单文件模块，import 为 gui.app）
 │   │   ├── pages/                # 各功能页面
 │   │   │   ├── csv/              # CSV 相关页面
 │   │   │   ├── database/         # 数据库导出 / 迁移页面
@@ -125,6 +125,8 @@ dbData-tools/
 ```
 
 > 业务代码导入仍按包名书写：`from core...`、`from db...`、`from gui...`、`from utils...`，不要写成 `from src.core...`。
+
+> **说明：** `MainApplication` 位于 `src/gui/app.py`。历史上若存在空的 `src/gui/app/` 目录会与 Python 包解析冲突，应删除；仓库中不应保留该空目录。
 
 ---
 

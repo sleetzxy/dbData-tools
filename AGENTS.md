@@ -21,7 +21,7 @@
   - `src/core/`：核心业务逻辑，例如 CSV 导入、导出、更新、迁移等。
   - `src/db/`：数据库连接、SQL 执行及 PostgreSQL / ClickHouse 适配。
   - `src/gui/`：界面层代码。
-    - `src/gui/app.py`：主壳 `MainApplication`（菜单/侧栏/页面装配）。
+    - `src/gui/app.py`：主壳 `MainApplication`（菜单/侧栏/页面装配）；**不要**在 `src/gui/` 下保留与 `app.py` 同名的空目录 `app/`，否则 `import gui.app` 可能解析为包而非该模块。
     - `src/gui/base/`：页面或组件的基础类。
     - `src/gui/components/`：可复用页面组件。
     - `src/gui/pages/`：具体业务页面逻辑。
