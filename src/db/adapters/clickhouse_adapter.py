@@ -30,8 +30,7 @@ class ClickHouseAdapter:
     def _qualified_table(self, database: str, table_name: str) -> str:
         """Return ``database.table`` with each segment quoted."""
         return (
-            f"{self._quote_identifier(database)}."
-            f"{self._quote_identifier(table_name)}"
+            f"{self._quote_identifier(database)}.{self._quote_identifier(table_name)}"
         )
 
     def create_client(self, db_config: dict[str, Any]) -> Any:
@@ -391,11 +390,26 @@ class ClickHouseAdapter:
         include_truncate = kwargs.get("include_truncate", True)
         logger = kwargs.get("logger")
 
+        if export_dir is None or not str(export_dir).strip():
+            return {
+                "success": False,
+                "error": "export_dir is required",
+                "schema": "",
+            }
+        export_dir_str = str(export_dir)
+        if client is None:
+            return {
+                "success": False,
+                "error": "client is required",
+                "schema": "",
+            }
+        ch_client = client
+
         database = self._validate_identifier(
             str(db_config.get("database", "")).strip(), "database"
         )
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        export_file = os.path.join(export_dir, f"{database}_{timestamp}.sql")
+        export_file = os.path.join(export_dir_str, f"{database}_{timestamp}.sql")
 
         def _extract_rows(result: Any) -> Sequence[tuple[Any, ...]]:
             if hasattr(result, "result_rows"):
@@ -407,10 +421,10 @@ class ClickHouseAdapter:
             return []
 
         def _query(statement: str) -> Sequence[tuple[Any, ...]]:
-            if hasattr(client, "query"):
-                return _extract_rows(client.query(statement))
-            if hasattr(client, "raw_query"):
-                response = client.raw_query(statement)
+            if hasattr(ch_client, "query"):
+                return _extract_rows(ch_client.query(statement))
+            if hasattr(ch_client, "raw_query"):
+                response = ch_client.raw_query(statement)
                 if isinstance(response, (list, tuple)):
                     return response
                 return []
@@ -466,8 +480,8 @@ class ClickHouseAdapter:
                     if include_truncate:
                         f.write(f"TRUNCATE TABLE {qualified};\n")
 
-                    if hasattr(client, "query"):
-                        data_result = client.query(f"SELECT * FROM {qualified}")
+                    if hasattr(ch_client, "query"):
+                        data_result = ch_client.query(f"SELECT * FROM {qualified}")
                         rows = _extract_rows(data_result)
                         column_names = []
                         if hasattr(data_result, "column_names"):

@@ -27,6 +27,7 @@ def export_tables_to_csv(
     返回:
         包含导出结果信息的字典
     """
+    conn = None
     try:
         conn = create_connection(db_config, logger)
         if not conn:
@@ -88,5 +89,5 @@ def export_tables_to_csv(
             "error": error_msg,
         }
     finally:
-        if "conn" in locals():
+        if conn is not None:
             close_connection(conn, logger)

@@ -347,7 +347,12 @@ class PostgreSQLAdapter:
                         sql.Identifier(table),
                     )
                     cursor.execute(count_query)
-                    row_count = cursor.fetchone()[0]
+                    count_row = cursor.fetchone()
+                    row_count = (
+                        int(count_row[0])
+                        if count_row and count_row[0] is not None
+                        else 0
+                    )
                     result["total_rows"] += row_count
                     result["exported_tables"].append(
                         {
@@ -421,9 +426,7 @@ class PostgreSQLAdapter:
             return result
 
         try:
-            status = getattr(
-                client, "status", psycopg2.extensions.STATUS_READY
-            )
+            status = getattr(client, "status", psycopg2.extensions.STATUS_READY)
             if status != psycopg2.extensions.STATUS_READY:
                 client.rollback()
             client.autocommit = False
@@ -574,22 +577,37 @@ class PostgreSQLAdapter:
         include_truncate = kwargs.get("include_truncate", True)
         logger = kwargs.get("logger")
 
+        if export_dir is None or not str(export_dir).strip():
+            return {
+                "success": False,
+                "error": "export_dir is required",
+                "schema": schema,
+            }
+        export_dir_str = str(export_dir)
+        if client is None:
+            return {
+                "success": False,
+                "error": "client is required",
+                "schema": schema,
+            }
+        pg_client = client
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         export_file = os.path.join(
-            export_dir,
+            export_dir_str,
             f"{db_config.get('database', 'database')}_{schema}_{timestamp}.sql",
         )
 
         try:
-            if hasattr(client, "set_isolation_level"):
+            if hasattr(pg_client, "set_isolation_level"):
                 try:
-                    client.set_isolation_level(
+                    pg_client.set_isolation_level(
                         psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT
                     )
                 except psycopg2.Error:
                     pass
 
-            with client.cursor() as cursor:
+            with pg_client.cursor() as cursor:
                 cursor.execute(
                     """
                     SELECT table_name

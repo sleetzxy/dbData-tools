@@ -3,6 +3,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from pytest import MonkeyPatch
@@ -685,9 +686,8 @@ def test_clickhouse_import_invalid_table_does_not_abort(
         def __enter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        def __exit__(self, exc_type, exc, tb) -> None:
             self.close()
-            return False
 
     def fake_open(path, mode="rb"):
         return DummyBinaryFile(b"col1\n2\n")
@@ -812,8 +812,8 @@ class _DummyCursorForPreSql:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc, tb):
-        return False
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
 
 
 class _DummyClientForPreSql:
@@ -838,7 +838,7 @@ def test_postgresql_pre_sql_handles_dollar_quotes() -> None:
     CREATE TABLE demo_table(id int);
     """
 
-    adapter._execute_pre_sql(client, pre_sql, logger=None)
+    adapter._execute_pre_sql(cast(Any, client), pre_sql, logger=None)
 
     assert len(client.executed) == 2
     assert client.executed[0].lstrip().startswith("CREATE OR REPLACE FUNCTION")
@@ -861,8 +861,8 @@ class _DummyCursorForRollback:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc, tb):
-        return False
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
 
 
 class _DummyClientForRollback:
@@ -903,7 +903,7 @@ def test_postgresql_import_rollback_clears_imported_tables(
     )
 
     result = adapter.import_csv(
-        client=client,
+        client=cast(Any, client),
         db_config={
             "name": "pg",
             "db_type": "postgresql",
@@ -941,9 +941,8 @@ def test_read_sql_from_file_accepts_uppercase_extension(
         def __enter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        def __exit__(self, exc_type, exc, tb) -> None:
             self.close()
-            return False
 
     monkeypatch.setattr("os.path.exists", lambda path: path == sql_path)
     monkeypatch.setattr(
@@ -1086,9 +1085,8 @@ def test_clickhouse_import_creates_csv_backup_before_import(
         def __enter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        def __exit__(self, exc_type, exc, tb) -> None:
             self.close()
-            return False
 
     written = {}
 
@@ -1100,10 +1098,9 @@ def test_clickhouse_import_creates_csv_backup_before_import(
         def __enter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        def __exit__(self, exc_type, exc, tb) -> None:
             written[self._path] = self.getvalue()
             self.close()
-            return False
 
     def fake_open(path, mode="r", encoding=None):
         path_str = str(path)
@@ -1254,7 +1251,7 @@ def test_postgresql_import_csv_truncate_before_false_skips_truncate() -> None:
             f.write("id,name\n1,alice\n")
 
         adapter.import_csv(
-            client=FakeConn(),
+            client=cast(Any, FakeConn()),
             db_config={"database": "testdb"},
             table_names=["t1"],
             data_dir=tmp,

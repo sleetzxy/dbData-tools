@@ -2,6 +2,7 @@
 基础页面类 - 所有工具页面的基类
 """
 
+import logging
 import threading
 import tkinter as tk
 from abc import ABC, abstractmethod
@@ -32,8 +33,12 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
     """
 
     def __init__(
-        self, root, config_file: str, log_title: str = "📋 操作日志", core_logger=None
-    ):
+        self,
+        root,
+        config_file: str,
+        log_title: str = "📋 操作日志",
+        core_logger: logging.Logger | None = None,
+    ) -> None:
         """
         初始化基础页面
 
@@ -49,6 +54,9 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
         self.root = root
         self.config_file = config_file
         self.core_logger = core_logger
+        self._config_bridge_logger: logging.Logger = (
+            core_logger if core_logger is not None else logging.getLogger(__name__)
+        )
 
         # 初始化 CTk
         self.ctk = ctk
@@ -90,8 +98,8 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
         # 设置右侧面板
         self._setup_right_panel(right_panel, log_title)
 
-        # 日志输出
-        self.logger = setup_logger(self.text_log, self.core_logger)
+        # 日志输出（ConfigManager 需要具体 Logger；无 core_logger 时用模块 logger 桥接）
+        self.logger = setup_logger(self.text_log, self._config_bridge_logger)
 
         # 加载连接并填充
         try:
@@ -164,13 +172,13 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
     def save_current_config(self):
         """保存当前配置"""
         config = self.get_config_dict()
-        success = self.config_manager.save(config, self.core_logger)
+        success = self.config_manager.save(config, self._config_bridge_logger)
         if not success and hasattr(self, "logger") and self.logger:
             self.logger.warning("配置保存失败")
 
     def load_and_apply_config(self):
         """加载并应用配置"""
-        config = self.config_manager.load(self.core_logger)
+        config = self.config_manager.load(self._config_bridge_logger)
         if config:
             try:
                 self.apply_config(config)

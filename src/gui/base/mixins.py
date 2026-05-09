@@ -2,6 +2,9 @@
 混入类模块 - 提供可复用的功能混入
 """
 
+# Mixin 由子类补齐 connection_menu/logger；静态分析无法推断组合。
+# pyright: reportAttributeAccessIssue=false
+
 import json
 import tkinter as tk
 from pathlib import Path
@@ -151,6 +154,8 @@ class ConnectionMixin:
     def get_selected_connection(self) -> dict | None:
         """获取当前选中的连接配置"""
         selected_name = self.get_selected_connection_name()
+        if selected_name is None:
+            return None
         selected_index = self.find_connection_index_by_name(selected_name)
         if (
             selected_index is None

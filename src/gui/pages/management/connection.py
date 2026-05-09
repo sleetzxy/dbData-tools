@@ -6,6 +6,9 @@
 - 嵌入模式（默认）：作为页面组件嵌入到主应用中
 """
 
+# pyright: reportAttributeAccessIssue=false
+from __future__ import annotations
+
 import copy
 import json
 import tkinter as tk
@@ -36,9 +39,9 @@ DB_TYPE_DEFAULTS = {
 
 
 class ConnectionManager(ctk.CTkFrame):
-    _instance = None
+    _instance: ConnectionManager | None = None
 
-    def __new__(cls, parent, *args, **kwargs):
+    def __new__(cls, parent, *args, **kwargs) -> ConnectionManager:
         """支持两种模式：
         - as_popup=True: 保留旧的弹窗模式（单例）
         - 默认嵌入模式：每次创建为页面组件（风格统一）
@@ -64,7 +67,9 @@ class ConnectionManager(ctk.CTkFrame):
                 except Exception:
                     pass
                 cls._instance.window.lift()
-            return cls._instance
+            popup = cls._instance
+            assert popup is not None
+            return popup
         else:
             return super().__new__(cls)
 

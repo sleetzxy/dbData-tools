@@ -81,9 +81,7 @@ def extract_zip_file_unified(zip_path: str, password: str | None = None) -> str:
                         dst.write(src.read())
                 except RuntimeError as exc:
                     if "password" in str(exc).lower():
-                        raise ValueError(
-                            "ZIP 压缩包密码错误或未提供密码"
-                        ) from exc
+                        raise ValueError("ZIP 压缩包密码错误或未提供密码") from exc
                     raise
                 except Exception as exc:
                     logger.warning(f"解压文件失败 {decoded_path}: {exc}")
@@ -189,7 +187,7 @@ def read_sql_from_file(file_path: str) -> str:
         return f.read()
 
 
-def _normalize_schema(db_type: str, schema: str) -> str:
+def _normalize_schema(db_type: str | None, schema: str) -> str:
     schema_value = ""
     if schema is not None:
         schema_value = str(schema).strip()
