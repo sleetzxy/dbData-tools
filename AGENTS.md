@@ -44,7 +44,6 @@
 ## 代码风格（仓库专属补充）
 > 通用 Python 代码风格（PEP 8、命名规则、类型标注、文档字符串、import 顺序等）见 [`.cursor/rules/python.mdc`](.cursor/rules/python.mdc)，本节只列与本仓库相关的细节。
 
-- 现有类名沿用历史 PascalCase，例如 `ImportCsvApp`、`ExportDbApp`、`MigratorPage`；新增类与之保持风格一致。
 - Tkinter 界面代码以可读为先，较长页面逻辑主动拆分为辅助方法或挪到 `gui/components/` / `gui/widgets/`，不要在 `main_gui.py` 与单个 `pages/` 文件里堆。
 - 注释以解释「为什么这样做」为主（业务上下文、规避的坑），避免重复代码字面含义。
 
