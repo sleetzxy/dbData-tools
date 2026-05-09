@@ -5,6 +5,7 @@
 - 弹窗模式（as_popup=True）：作为独立的弹窗显示
 - 嵌入模式（默认）：作为页面组件嵌入到主应用中
 """
+
 import copy
 import tkinter as tk
 from tkinter import messagebox
@@ -32,6 +33,7 @@ DB_TYPE_DEFAULTS = {
     "clickhouse": {"port": "8123", "schema": ""},
 }
 
+
 class ConnectionManager(ctk.CTkFrame):
     _instance = None
 
@@ -52,6 +54,7 @@ class ConnectionManager(ctk.CTkFrame):
             if not has_valid_instance:
                 cls._instance = super().__new__(cls)
                 import customtkinter as ctk
+
                 cls._instance.window = ctk.CTkToplevel(parent)
                 cls._instance.window.withdraw()
                 cls._instance.window.title("数据库连接管理")
@@ -64,13 +67,21 @@ class ConnectionManager(ctk.CTkFrame):
         else:
             return super().__new__(cls)
 
-    def __init__(self, parent, on_connections_updated=None, logger=None, as_popup=False, theme=None):
+    def __init__(
+        self,
+        parent,
+        on_connections_updated=None,
+        logger=None,
+        as_popup=False,
+        theme=None,
+    ):
         """初始化逻辑：根据模式分别构建
         - 弹窗模式：兼容旧逻辑
         - 嵌入模式：在父容器中创建页面，并应用统一主题
         """
         import customtkinter as ctk
-        if as_popup and hasattr(self, '_window_initialized'):
+
+        if as_popup and hasattr(self, "_window_initialized"):
             self._show_existing_window()
             return
 
@@ -79,7 +90,6 @@ class ConnectionManager(ctk.CTkFrame):
         self.connections = []
         self._editing_original_name = None
         self.parent = parent
-
 
         base_theme = get_idea_dark_colors()
         # 将传入的 theme 覆盖默认颜色，不存在的键使用默认值兜底，避免 KeyError
@@ -103,7 +113,7 @@ class ConnectionManager(ctk.CTkFrame):
 
     def _safe_show_window(self):
         """安全显示窗口：居中于父窗口、顶置显示并获取焦点（仅弹窗模式）"""
-        if not hasattr(self, 'window'):
+        if not hasattr(self, "window"):
             return
         try:
             self.parent.update_idletasks()
@@ -129,7 +139,7 @@ class ConnectionManager(ctk.CTkFrame):
 
     def _show_existing_window(self):
         """显示已存在的窗口（仅弹窗模式）"""
-        if not hasattr(self, 'window'):
+        if not hasattr(self, "window"):
             return
         if self.window.winfo_exists():
             try:
@@ -154,7 +164,7 @@ class ConnectionManager(ctk.CTkFrame):
 
     def _on_close(self):
         """关闭窗口时清理单例（仅弹窗模式）"""
-        if hasattr(self, 'window'):
+        if hasattr(self, "window"):
             ConnectionManager._instance = None
             self.window.destroy()
 
@@ -163,15 +173,15 @@ class ConnectionManager(ctk.CTkFrame):
         self.create_widgets()
         self.load_connections()
         # 确保在嵌入模式下正确显示
-        if not hasattr(self, 'window'):
+        if not hasattr(self, "window"):
             self.pack(fill=tk.BOTH, expand=True)
 
-    def log(self, message, level='info'):
+    def log(self, message, level="info"):
         """统一的日志记录方法"""
         if self.logger:
-            if level == 'info':
+            if level == "info":
                 self.logger.info(message)
-            elif level == 'error':
+            elif level == "error":
                 self.logger.error(message)
         else:
             print(f"[{level.upper()}] {message}")  # 备用输出
@@ -180,10 +190,10 @@ class ConnectionManager(ctk.CTkFrame):
         """创建界面组件（统一深色风格，自绘行列表，行内操作）"""
         import customtkinter as ctk
         import tkinter as tk
-        
+
         # 设置背景色
         self._root_container.configure(fg_color=self.colors["bg"])
-        
+
         # 主容器
         main_container = ctk.CTkFrame(self._root_container, fg_color="transparent")
         main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
@@ -219,20 +229,21 @@ class ConnectionManager(ctk.CTkFrame):
         ).pack(side=tk.RIGHT, padx=(0, 8), pady=4)
 
         # 列表区域（统一深色风格）
-        list_card = ctk.CTkFrame(main_container, fg_color=self.colors["card_bg"], corner_radius=8)
+        list_card = ctk.CTkFrame(
+            main_container, fg_color=self.colors["card_bg"], corner_radius=8
+        )
         list_card.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         # 表头（居中显示）
         header_row = ctk.CTkFrame(list_card, fg_color=self.colors["card_bg"])
-        header_row.pack(fill='x', padx=20, pady=(15, 8))
-        
+        header_row.pack(fill="x", padx=20, pady=(15, 8))
+
         def add_header(text, col, weight=1):
-            StyledLabel(
-                header_row,
-                text=text
-            ).grid(row=0, column=col, sticky="nsew", padx=(0, 20))
+            StyledLabel(header_row, text=text).grid(
+                row=0, column=col, sticky="nsew", padx=(0, 20)
+            )
             header_row.grid_columnconfigure(col, weight=weight, minsize=100)
-        
+
         # 表头居中显示
         add_header("名称", 0, weight=2)
         add_header("类型", 1, weight=1)
@@ -240,52 +251,52 @@ class ConnectionManager(ctk.CTkFrame):
         add_header("端口", 3, weight=1)
         add_header("用户名", 4, weight=2)
         add_header("操作", 5, weight=1)
-        
+
         # 分割线
         separator = ctk.CTkFrame(list_card, fg_color=self.colors["border"], height=1)
-        separator.pack(fill='x', padx=20, pady=(0, 10))
+        separator.pack(fill="x", padx=20, pady=(0, 10))
 
         # 可滚动的行容器（使用灰色滚动条）
         self.list_rows_container = ScrollableFrame(
-            list_card, 
-            fg_color=self.colors["card_bg"], 
+            list_card,
+            fg_color=self.colors["card_bg"],
             corner_radius=0,
         )
-        self.list_rows_container.pack(fill='both', expand=True, padx=20, pady=(0, 10))
-        
+        self.list_rows_container.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+
         # 分页控件
         self.page_size = 7
         self.current_page = 1
         self.total_pages = 1
-        
+
         self.pagination_frame = ctk.CTkFrame(list_card, fg_color="transparent")
-        self.pagination_frame.pack(fill='x', padx=20, pady=(0, 10), side='right')
-        
+        self.pagination_frame.pack(fill="x", padx=20, pady=(0, 10), side="right")
+
         self.prev_btn = StyledButton(
             self.pagination_frame,
             text="上一页",
             command=lambda: self._change_page(-1),
             width=80,
-            state="disabled"
+            state="disabled",
         )
-        self.prev_btn.pack(side='left', padx=(0, 10))
-        
+        self.prev_btn.pack(side="left", padx=(0, 10))
+
         self.page_label = ctk.CTkLabel(
             self.pagination_frame,
             text="1/1",
-            font=('Microsoft YaHei', 11),
-            text_color=self.colors["text_primary"]
+            font=("Microsoft YaHei", 11),
+            text_color=self.colors["text_primary"],
         )
-        self.page_label.pack(side='left')
-        
+        self.page_label.pack(side="left")
+
         self.next_btn = StyledButton(
             self.pagination_frame,
             text="下一页",
             command=lambda: self._change_page(1),
             width=80,
-            state="disabled"
+            state="disabled",
         )
-        self.next_btn.pack(side='left', padx=(10, 0))
+        self.next_btn.pack(side="left", padx=(10, 0))
 
         # 当前选中索引
         self.selected_index = None
@@ -325,7 +336,9 @@ class ConnectionManager(ctk.CTkFrame):
         if not hasattr(self, "list_rows_container") or self.list_rows_container is None:
             return
 
-        rows_container = getattr(self.list_rows_container, "inner_content", self.list_rows_container)
+        rows_container = getattr(
+            self.list_rows_container, "inner_content", self.list_rows_container
+        )
 
         # 清空旧内容
         for child in rows_container.winfo_children():
@@ -338,39 +351,41 @@ class ConnectionManager(ctk.CTkFrame):
             self.selected_index = None
             empty_frame = ctk.CTkFrame(rows_container, fg_color="transparent")
             empty_frame.pack(expand=True, fill=tk.BOTH, pady=50)
-            
+
             empty_label = ctk.CTkLabel(
-                empty_frame, 
+                empty_frame,
                 text="暂无数据库连接",
-                font=('Microsoft YaHei', 14),
-                text_color=self.colors["text_secondary"]
+                font=("Microsoft YaHei", 14),
+                text_color=self.colors["text_secondary"],
             )
             empty_label.pack(pady=(0, 10))
-            
+
             sub_label = ctk.CTkLabel(
                 empty_frame,
                 text="点击右上方的'新增连接'按钮来添加您的第一个连接",
-                font=('Microsoft YaHei', 11),
-                text_color=self.colors["text_secondary"]
+                font=("Microsoft YaHei", 11),
+                text_color=self.colors["text_secondary"],
             )
             sub_label.pack()
-            
+
             # 更新分页状态
             self._update_pagination()
             self._visible_row_frames = []
             return
 
         # 计算分页
-        self.total_pages = max(1, (len(self.connections) + self.page_size - 1) // self.page_size)
+        self.total_pages = max(
+            1, (len(self.connections) + self.page_size - 1) // self.page_size
+        )
         self.current_page = min(self.current_page, self.total_pages)
         # 确保current_page不会小于1
         self.current_page = max(1, self.current_page)
-        
+
         # 获取当前页数据
         start_idx = (self.current_page - 1) * self.page_size
         end_idx = min(start_idx + self.page_size, len(self.connections))
         page_connections = self.connections[start_idx:end_idx]
-        
+
         # 更新分页状态
         self._update_pagination()
 
@@ -390,7 +405,7 @@ class ConnectionManager(ctk.CTkFrame):
                 height=50,
                 corner_radius=6,
             )
-            row_frame.pack(fill='x', padx=0, pady=2)
+            row_frame.pack(fill="x", padx=0, pady=2)
             self._visible_row_frames.append((global_idx, row_frame))
 
             def on_enter(_e, frame=row_frame, gidx=global_idx):
@@ -410,8 +425,8 @@ class ConnectionManager(ctk.CTkFrame):
 
             # 创建行内容框架
             content_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
-            content_frame.pack(fill='x', padx=20, pady=8)
-            
+            content_frame.pack(fill="x", padx=20, pady=8)
+
             # 配置列权重（与表头一致）
             for col in range(6):
                 if col == 5:  # 操作列
@@ -422,15 +437,15 @@ class ConnectionManager(ctk.CTkFrame):
                     content_frame.grid_columnconfigure(col, weight=1, minsize=120)
                 else:
                     content_frame.grid_columnconfigure(col, weight=2, minsize=150)
-            
+
             # 添加单元格（居中显示）；绑定点击以便点到文字也能选中行
             def add_cell(parent, text, col, page_local_idx):
                 cell = ctk.CTkLabel(
                     parent,
                     text=str(text) if text is not None else "",
-                    font=('Microsoft YaHei', 11),
+                    font=("Microsoft YaHei", 11),
                     text_color=self.colors["text_primary"],
-                    anchor="center"  # 修改为居中
+                    anchor="center",  # 修改为居中
                 )
                 cell.grid(row=0, column=col, sticky="nsew", padx=(0, 20), pady=4)
                 cell.bind(
@@ -446,7 +461,9 @@ class ConnectionManager(ctk.CTkFrame):
             # 添加数据单元格
             add_cell(content_frame, conn.get("name", ""), 0, idx)
             db_type_value = str(conn.get("db_type", "postgresql")).strip().lower()
-            db_type_label = DB_TYPE_VALUE_TO_LABEL.get(db_type_value, db_type_value or "postgresql")
+            db_type_label = DB_TYPE_VALUE_TO_LABEL.get(
+                db_type_value, db_type_value or "postgresql"
+            )
             add_cell(content_frame, db_type_label, 1, idx)
             add_cell(content_frame, conn.get("host", ""), 2, idx)
             add_cell(content_frame, str(conn.get("port", "")), 3, idx)
@@ -467,9 +484,11 @@ class ConnectionManager(ctk.CTkFrame):
                 fg_color=self.colors["button_bg"],
                 hover_color=self.colors["button_hover_gray"],
                 text_color=self.colors["text_primary"],
-                font=('Microsoft YaHei', 14),
+                font=("Microsoft YaHei", 14),
                 corner_radius=6,
-                command=lambda i=idx, start=start_idx: self._open_form_dialog(initial_data=self.connections[start + i], is_edit=True)
+                command=lambda i=idx, start=start_idx: self._open_form_dialog(
+                    initial_data=self.connections[start + i], is_edit=True
+                ),
             )
             edit_btn.grid(row=0, column=0, padx=(0, 4), sticky="e")
 
@@ -482,9 +501,11 @@ class ConnectionManager(ctk.CTkFrame):
                 fg_color=self.colors["button_bg"],
                 hover_color=self.colors["button_hover_gray"],
                 text_color=self.colors["text_primary"],
-                font=('Microsoft YaHei', 14),
+                font=("Microsoft YaHei", 14),
                 corner_radius=6,
-                command=lambda i=idx, start=start_idx: self.delete_connection(index=start + i)
+                command=lambda i=idx, start=start_idx: self.delete_connection(
+                    index=start + i
+                ),
             )
             delete_btn.grid(row=0, column=1, sticky="w")
 
@@ -501,7 +522,7 @@ class ConnectionManager(ctk.CTkFrame):
         global_idx = (self.current_page - 1) * self.page_size + index
         self.selected_index = global_idx
         self._sync_row_selection_styles()
-        
+
     def _change_page(self, delta):
         """切换页码"""
         new_page = self.current_page + delta
@@ -513,15 +534,17 @@ class ConnectionManager(ctk.CTkFrame):
             self._update_pagination()
         # 强制刷新界面
         self._root_container.update()
-            
+
     def _update_pagination(self):
         """更新分页控件状态"""
         if not hasattr(self, "pagination_frame"):
             return
-            
+
         self.page_label.configure(text=f"{self.current_page}/{self.total_pages}")
         self.prev_btn.configure(state="normal" if self.current_page > 1 else "disabled")
-        self.next_btn.configure(state="normal" if self.current_page < self.total_pages else "disabled")
+        self.next_btn.configure(
+            state="normal" if self.current_page < self.total_pages else "disabled"
+        )
 
     def load_connections(self):
         """加载连接列表并绘制"""
@@ -558,10 +581,14 @@ class ConnectionManager(ctk.CTkFrame):
                     skipped_records = []
                     for index, item in enumerate(loaded_connections):
                         if not isinstance(item, dict):
-                            skipped_records.append(f"index={index}, reason=record_not_object")
+                            skipped_records.append(
+                                f"index={index}, reason=record_not_object"
+                            )
                             continue
                         try:
-                            normalized_connections.append(normalize_connection_config(item))
+                            normalized_connections.append(
+                                normalize_connection_config(item)
+                            )
                         except Exception as item_error:
                             name = item.get("name", "<unknown>")
                             db_type = item.get("db_type", "<missing>")
@@ -667,17 +694,16 @@ class ConnectionManager(ctk.CTkFrame):
     def _open_form_dialog(self, initial_data=None, is_edit=False):
         """打开连接表单对话框（新增或编辑）"""
         import customtkinter as ctk
-        
+
         dlg = ctk.CTkToplevel(self._root_container)
         dlg.title("新增连接" if not is_edit else "编辑连接")
         dlg.resizable(False, False)
-        
+
         try:
             dlg.transient(self._root_container.winfo_toplevel())
             dlg.grab_set()
         except Exception:
             pass
-    
 
         # 设置对话框背景色
         dlg.configure(fg_color=self.colors["bg"])
@@ -688,15 +714,24 @@ class ConnectionManager(ctk.CTkFrame):
         # 修改为 grid 布局以对齐 label
         container.grid_columnconfigure(1, weight=1)  # entry 列扩展
 
-        initial_type_value = str((initial_data or {}).get("db_type", "postgresql")).strip().lower() or "postgresql"
+        initial_type_value = (
+            str((initial_data or {}).get("db_type", "postgresql")).strip().lower()
+            or "postgresql"
+        )
         if initial_type_value not in DB_TYPE_VALUE_TO_LABEL:
             initial_type_value = "postgresql"
 
-        def make_row(parent, row_idx, label_text, placeholder="", initial="", is_password=False):
-            lbl = StyledLabel(parent, text=label_text, width=30, anchor="e")  # 固定宽度并右对齐
+        def make_row(
+            parent, row_idx, label_text, placeholder="", initial="", is_password=False
+        ):
+            lbl = StyledLabel(
+                parent, text=label_text, width=30, anchor="e"
+            )  # 固定宽度并右对齐
             lbl.grid(row=row_idx, column=0, sticky="e", padx=(0, 10), pady=8)
-            
-            entry = StyledEntry(parent, placeholder_text=placeholder, show="●" if is_password else None)
+
+            entry = StyledEntry(
+                parent, placeholder_text=placeholder, show="●" if is_password else None
+            )
             if initial:
                 entry.insert(0, initial)
             entry.grid(row=row_idx, column=1, sticky="ew", pady=8)
@@ -709,7 +744,9 @@ class ConnectionManager(ctk.CTkFrame):
                 entry.insert(0, str(value))
 
         # 使用行索引调用
-        name_e = make_row(container, 0, "名称", "例如：生产库", (initial_data or {}).get("name", ""))
+        name_e = make_row(
+            container, 0, "名称", "例如：生产库", (initial_data or {}).get("name", "")
+        )
         db_type_label = StyledLabel(container, text="类型", width=30, anchor="e")
         db_type_label.grid(row=1, column=0, sticky="e", padx=(0, 10), pady=8)
         db_type_var = tk.StringVar(value=DB_TYPE_VALUE_TO_LABEL[initial_type_value])
@@ -720,24 +757,53 @@ class ConnectionManager(ctk.CTkFrame):
         )
         db_type_menu.grid(row=1, column=1, sticky="ew", pady=8)
 
-        host_e = make_row(container, 2, "主机", "例如：127.0.0.1", (initial_data or {}).get("host", ""))
+        host_e = make_row(
+            container,
+            2,
+            "主机",
+            "例如：127.0.0.1",
+            (initial_data or {}).get("host", ""),
+        )
         port_e = make_row(
             container,
             3,
             "端口",
             "默认：5432/8123",
-            str((initial_data or {}).get("port", DB_TYPE_DEFAULTS[initial_type_value]["port"])),
+            str(
+                (initial_data or {}).get(
+                    "port", DB_TYPE_DEFAULTS[initial_type_value]["port"]
+                )
+            ),
         )
-        db_e   = make_row(container, 4, "数据库", "例如：postgres", (initial_data or {}).get("database", ""))
+        db_e = make_row(
+            container,
+            4,
+            "数据库",
+            "例如：postgres",
+            (initial_data or {}).get("database", ""),
+        )
         schema_e = make_row(
             container,
             5,
             "模式",
             "public",
-            str((initial_data or {}).get("schema", DB_TYPE_DEFAULTS[initial_type_value]["schema"])),
+            str(
+                (initial_data or {}).get(
+                    "schema", DB_TYPE_DEFAULTS[initial_type_value]["schema"]
+                )
+            ),
         )
-        user_e = make_row(container, 6, "用户", "例如：postgres", (initial_data or {}).get("user", ""))
-        pwd_e  = make_row(container, 7, "密码", "可留空", (initial_data or {}).get("password", ""), is_password=True)
+        user_e = make_row(
+            container, 6, "用户", "例如：postgres", (initial_data or {}).get("user", "")
+        )
+        pwd_e = make_row(
+            container,
+            7,
+            "密码",
+            "可留空",
+            (initial_data or {}).get("password", ""),
+            is_password=True,
+        )
 
         # “是否自定义”仅跟踪本次对话框会话内的用户输入行为，
         # 不根据编辑模式下的预加载值推断。
@@ -757,7 +823,9 @@ class ConnectionManager(ctk.CTkFrame):
 
         def apply_type_defaults(db_type_value):
             nonlocal port_customized, schema_customized
-            defaults = DB_TYPE_DEFAULTS.get(db_type_value, DB_TYPE_DEFAULTS["postgresql"])
+            defaults = DB_TYPE_DEFAULTS.get(
+                db_type_value, DB_TYPE_DEFAULTS["postgresql"]
+            )
 
             if not port_customized:
                 set_entry_text(port_e, defaults["port"])
@@ -806,13 +874,14 @@ class ConnectionManager(ctk.CTkFrame):
             name = name_e.get().strip()
             host = host_e.get().strip()
             db_type = DB_TYPE_LABEL_TO_VALUE.get(db_type_var.get(), "postgresql")
-            default_port = DB_TYPE_DEFAULTS.get(db_type, DB_TYPE_DEFAULTS["postgresql"])["port"]
+            default_port = DB_TYPE_DEFAULTS.get(
+                db_type, DB_TYPE_DEFAULTS["postgresql"]
+            )["port"]
             port_txt = port_e.get().strip() or str(default_port)
-            dbn  = db_e.get().strip()
+            dbn = db_e.get().strip()
             user = user_e.get().strip()
-            pwd  = pwd_e.get()
+            pwd = pwd_e.get()
             schema = schema_e.get().strip() if db_type != "clickhouse" else ""
-
 
             if not name or not host or not dbn or not user:
                 messagebox.showerror("错误", "请填写名称/主机/数据库/用户")
@@ -831,9 +900,8 @@ class ConnectionManager(ctk.CTkFrame):
                 "user": user,
                 "password": pwd,
                 "schema": schema,
-                "db_type": db_type
+                "db_type": db_type,
             }
-
 
             edit_index = None
             if is_edit and initial_data is not None:
@@ -874,31 +942,31 @@ class ConnectionManager(ctk.CTkFrame):
 
         # 保存按钮
         save_btn = StyledButton(
-            btn_bar, 
+            btn_bar,
             text="保存",
-            command=on_save, 
+            command=on_save,
             width=100,
             height=32,
             fg_color=self.colors["button_bg"],
             hover_color=self.colors["button_hover_gray"],
             text_color=self.colors["text_primary"],
-            font=('Microsoft YaHei', 12),
-            corner_radius=6
+            font=("Microsoft YaHei", 12),
+            corner_radius=6,
         )
         save_btn.pack(side="right")
-        
+
         # 取消按钮
         cancel_btn = StyledButton(
-            btn_bar, 
-            text="取消", 
-            command=dlg.destroy, 
+            btn_bar,
+            text="取消",
+            command=dlg.destroy,
             width=100,
             height=32,
             fg_color=self.colors["button_bg"],
             hover_color=self.colors["button_hover_gray"],
             text_color=self.colors["text_primary"],
-            font=('Microsoft YaHei', 12),
-            corner_radius=6
+            font=("Microsoft YaHei", 12),
+            corner_radius=6,
         )
         cancel_btn.pack(side="right", padx=(10, 0))
 
@@ -916,26 +984,28 @@ class ConnectionManager(ctk.CTkFrame):
         except Exception:
             return f"{width}x{height}+100+100"
 
+
 # 测试函数
 def test_connection_manager():
     """测试连接管理器"""
     import customtkinter as ctk
-    
+
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("dark-blue")
-    
+
     root = ctk.CTk()
     root.title("连接管理器测试")
     root.geometry("900x600")
-    
+
     def on_connections_updated():
         print("连接已更新")
-    
+
     # 创建连接管理器实例（嵌入模式）
     connection_manager = ConnectionManager(root, on_connections_updated, as_popup=False)
     connection_manager.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-    
+
     root.mainloop()
+
 
 if __name__ == "__main__":
     test_connection_manager()

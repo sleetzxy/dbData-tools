@@ -1,6 +1,7 @@
 """
 可复用组件 - 连接选择器
 """
+
 import tkinter as tk
 import customtkinter as ctk
 from gui.widgets.labels import StyledLabel
@@ -31,16 +32,14 @@ class ConnectionSelector(ctk.CTkFrame):
 
         # 标签
         self.label = StyledLabel(self, text=label_text)
-        self.label.pack(anchor='w', pady=(0, 3))
+        self.label.pack(anchor="w", pady=(0, 3))
 
         # 下拉框
         self.connection_var = tk.StringVar()
         self.connection_menu = StyledOptionMenu(
-            self,
-            variable=self.connection_var,
-            values=["加载中..."]
+            self, variable=self.connection_var, values=["加载中..."]
         )
-        self.connection_menu.pack(anchor='w', fill='x')
+        self.connection_menu.pack(anchor="w", fill="x")
 
     def set_values(self, values):
         """设置下拉框的值"""

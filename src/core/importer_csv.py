@@ -15,7 +15,7 @@ def extract_zip_file_unified(zip_path: str, password: Optional[str] = None) -> s
     """解压 ZIP 文件，同时兼容 AES 加密与常见文件名编码问题。"""
     if not os.path.isfile(zip_path):
         raise FileNotFoundError(f"ZIP 文件不存在: {zip_path}")
-    if not zip_path.lower().endswith('.zip'):
+    if not zip_path.lower().endswith(".zip"):
         raise ValueError(f"不是 ZIP 文件: {zip_path}")
 
     zip_dir = os.path.dirname(zip_path)
@@ -29,22 +29,22 @@ def extract_zip_file_unified(zip_path: str, password: Optional[str] = None) -> s
 
     def _sanitize_windows_filename(name: str) -> str:
         invalid_chars = '<>:"\\|?*'
-        sanitized = ''.join('_' if c in invalid_chars else c for c in name)
-        return sanitized.strip().rstrip('.')
+        sanitized = "".join("_" if c in invalid_chars else c for c in name)
+        return sanitized.strip().rstrip(".")
 
     def _normalize_and_sanitize(path: str) -> str:
-        normalized = path.replace('\\', '/')
-        parts = [p for p in normalized.split('/') if p not in ('', '.', '..')]
+        normalized = path.replace("\\", "/")
+        parts = [p for p in normalized.split("/") if p not in ("", ".", "..")]
         safe_parts = [_sanitize_windows_filename(p) for p in parts]
-        return os.path.join(*safe_parts) if safe_parts else ''
+        return os.path.join(*safe_parts) if safe_parts else ""
 
     def _decode_zip_filename(name: str, info) -> str:
-        if hasattr(info, 'flag_bits') and (info.flag_bits & 0x800) != 0:
+        if hasattr(info, "flag_bits") and (info.flag_bits & 0x800) != 0:
             return _normalize_and_sanitize(name)
 
-        for enc in ['gbk', 'gb2312', 'big5', 'utf-8']:
+        for enc in ["gbk", "gb2312", "big5", "utf-8"]:
             try:
-                raw = name.encode('cp437')
+                raw = name.encode("cp437")
                 decoded = raw.decode(enc)
                 return _normalize_and_sanitize(decoded)
             except Exception:
@@ -57,7 +57,9 @@ def extract_zip_file_unified(zip_path: str, password: Optional[str] = None) -> s
                 original_filename = file_info.filename
                 decoded_path = _decode_zip_filename(original_filename, file_info)
 
-                if (hasattr(file_info, 'is_dir') and file_info.is_dir()) or original_filename.endswith('/'):
+                if (
+                    hasattr(file_info, "is_dir") and file_info.is_dir()
+                ) or original_filename.endswith("/"):
                     dir_path = os.path.join(extract_dir, decoded_path)
                     if dir_path:
                         os.makedirs(dir_path, exist_ok=True)
@@ -69,10 +71,16 @@ def extract_zip_file_unified(zip_path: str, password: Optional[str] = None) -> s
                     os.makedirs(parent_dir, exist_ok=True)
 
                 try:
-                    with zf.open(file_info, pwd=password.encode('utf-8') if password else None) as src, open(target_path, 'wb') as dst:
+                    with (
+                        zf.open(
+                            file_info,
+                            pwd=password.encode("utf-8") if password else None,
+                        ) as src,
+                        open(target_path, "wb") as dst,
+                    ):
                         dst.write(src.read())
                 except RuntimeError as exc:
-                    if 'password' in str(exc).lower():
+                    if "password" in str(exc).lower():
                         raise ValueError("ZIP 压缩包密码错误或未提供密码")
                     raise
                 except Exception as exc:
@@ -87,7 +95,11 @@ def extract_zip_file_unified(zip_path: str, password: Optional[str] = None) -> s
         raise Exception(f"解压 ZIP 文件失败: {exc}")
 
 
-def get_data_directory(data_source: str, source_type: str = "folder", archive_password: Optional[str] = None) -> str:
+def get_data_directory(
+    data_source: str,
+    source_type: str = "folder",
+    archive_password: Optional[str] = None,
+) -> str:
     """根据数据源类型返回可用的数据目录。"""
     if source_type == "folder":
         if not os.path.isdir(data_source):
@@ -103,7 +115,7 @@ def get_table_names_from_csv(data_dir: str) -> List[str]:
     try:
         table_names = []
         for filename in os.listdir(data_dir):
-            if filename.endswith('.csv'):
+            if filename.endswith(".csv"):
                 table_names.append(os.path.splitext(filename)[0])
         return table_names
     except UnicodeDecodeError:
@@ -111,12 +123,12 @@ def get_table_names_from_csv(data_dir: str) -> List[str]:
             table_names = []
             for filename in os.listdir(data_dir):
                 try:
-                    if filename.endswith('.csv'):
+                    if filename.endswith(".csv"):
                         table_names.append(os.path.splitext(filename)[0])
                 except UnicodeDecodeError:
                     try:
-                        decoded_name = filename.encode('latin-1').decode('gbk')
-                        if decoded_name.endswith('.csv'):
+                        decoded_name = filename.encode("latin-1").decode("gbk")
+                        if decoded_name.endswith(".csv"):
                             table_names.append(os.path.splitext(decoded_name)[0])
                     except Exception:
                         continue
@@ -126,27 +138,29 @@ def get_table_names_from_csv(data_dir: str) -> List[str]:
             return []
 
 
-def generate_copy_commands(table_names: List[str], data_dir: str) -> List[Tuple[str, str]]:
+def generate_copy_commands(
+    table_names: List[str], data_dir: str
+) -> List[Tuple[str, str]]:
     """生成 (表名, CSV 路径) 列表。"""
     copy_commands = []
     for table in table_names:
         csv_files = []
 
-        csv_file = os.path.join(data_dir, f'{table}.csv')
+        csv_file = os.path.join(data_dir, f"{table}.csv")
         if os.path.exists(csv_file):
             csv_files.append((table, csv_file))
         else:
             try:
-                encoded_table = table.encode('gbk').decode('latin-1')
-                csv_file_gbk = os.path.join(data_dir, f'{encoded_table}.csv')
+                encoded_table = table.encode("gbk").decode("latin-1")
+                csv_file_gbk = os.path.join(data_dir, f"{encoded_table}.csv")
                 if os.path.exists(csv_file_gbk):
                     csv_files.append((table, csv_file_gbk))
             except Exception:
                 pass
 
             try:
-                encoded_table = table.encode('utf-8').decode('latin-1')
-                csv_file_utf8 = os.path.join(data_dir, f'{encoded_table}.csv')
+                encoded_table = table.encode("utf-8").decode("latin-1")
+                csv_file_utf8 = os.path.join(data_dir, f"{encoded_table}.csv")
                 if os.path.exists(csv_file_utf8):
                     csv_files.append((table, csv_file_utf8))
             except Exception:
@@ -167,9 +181,9 @@ def read_sql_from_file(file_path: str) -> str:
     """读取 SQL 文件内容，仅支持 txt 或 sql 扩展名。"""
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"SQL 文件不存在: {file_path}")
-    if not file_path.lower().endswith(('.txt', '.sql')):
+    if not file_path.lower().endswith((".txt", ".sql")):
         raise ValueError(f"SQL 文件格式不支持: {file_path}，仅支持 txt 或 sql")
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         return f.read()
 
 

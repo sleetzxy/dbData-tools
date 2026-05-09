@@ -85,7 +85,9 @@ def create_connection(
         return None
 
 
-def close_connection(handle: Optional[ConnectionHandle], logger: logging.Logger) -> None:
+def close_connection(
+    handle: Optional[ConnectionHandle], logger: logging.Logger
+) -> None:
     if handle:
         try:
             handle.adapter.close_client(handle.client)

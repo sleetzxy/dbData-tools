@@ -1,6 +1,7 @@
 """
 重构后的 CSV 加解密页面 - 使用新的基类和组件架构
 """
+
 import tkinter as tk
 import os
 from tkinter import messagebox
@@ -30,107 +31,103 @@ class UpdateCsvPage(BaseToolPage):
             root=root,
             config_file=self.CONFIG_FILE,
             log_title="📋 处理日志",
-            core_logger=core_logger
+            core_logger=core_logger,
         )
 
     def setup_left_panel_content(self, parent):
         """设置左侧面板的具体内容"""
         # 标题
         title = TitleLabel(parent, text="🔄 CSV 加解密")
-        title.pack(anchor='w', pady=(0, 15))
+        title.pack(anchor="w", pady=(0, 15))
 
         # 映射文件路径选择器
         self.mapping_selector = PathSelector(
             parent,
             label_text="映射文件路径（.csv）",
             mode="file",
-            file_types=[("CSV文件", "*.csv"), ("所有文件", "*.*")]
+            file_types=[("CSV文件", "*.csv"), ("所有文件", "*.*")],
         )
-        self.mapping_selector.pack(fill='x', pady=(0, 15))
+        self.mapping_selector.pack(fill="x", pady=(0, 15))
 
         # 输入文件夹路径选择器
         self.input_selector = PathSelector(
-            parent,
-            label_text="输入文件夹（原始CSV）",
-            mode="folder"
+            parent, label_text="输入文件夹（原始CSV）", mode="folder"
         )
-        self.input_selector.pack(fill='x', pady=(0, 15))
+        self.input_selector.pack(fill="x", pady=(0, 15))
 
         # 操作模式选择
         mode_label = StyledLabel(parent, text="操作模式")
-        mode_label.pack(anchor='w', pady=(0, 3))
+        mode_label.pack(anchor="w", pady=(0, 3))
 
         mode_frame = self.ctk.CTkFrame(
-            parent,
-            fg_color=self.idea_dark_colors["card_bg"],
-            corner_radius=8
+            parent, fg_color=self.idea_dark_colors["card_bg"], corner_radius=8
         )
-        mode_frame.pack(anchor='w', fill='x', pady=(0, 15))
+        mode_frame.pack(anchor="w", fill="x", pady=(0, 15))
 
         # 内部容器，用于居中对齐单选按钮
-        mode_inner_frame = self.ctk.CTkFrame(mode_frame, fg_color=self.idea_dark_colors["card_bg"])
+        mode_inner_frame = self.ctk.CTkFrame(
+            mode_frame, fg_color=self.idea_dark_colors["card_bg"]
+        )
         mode_inner_frame.pack(pady=15)
 
-        self.mode_var = tk.StringVar(value='encrypt')
+        self.mode_var = tk.StringVar(value="encrypt")
         # 加密单选按钮
         self.encrypt_radio = self.ctk.CTkRadioButton(
             mode_inner_frame,
             text="加密",
             variable=self.mode_var,
-            value='encrypt',
-            font=('Microsoft YaHei', 10),
+            value="encrypt",
+            font=("Microsoft YaHei", 10),
             text_color=self.idea_dark_colors["text_primary"],
             fg_color=self.idea_dark_colors["gray_button"],
             hover_color=self.idea_dark_colors["gray_button_hover"],
-            border_color=self.idea_dark_colors["gray_button_border"]
+            border_color=self.idea_dark_colors["gray_button_border"],
         )
-        self.encrypt_radio.pack(side='left', padx=(20, 30))
+        self.encrypt_radio.pack(side="left", padx=(20, 30))
 
         # 解密单选按钮
         self.decrypt_radio = self.ctk.CTkRadioButton(
             mode_inner_frame,
             text="解密",
             variable=self.mode_var,
-            value='decrypt',
-            font=('Microsoft YaHei', 10),
+            value="decrypt",
+            font=("Microsoft YaHei", 10),
             text_color=self.idea_dark_colors["text_primary"],
             fg_color=self.idea_dark_colors["gray_button"],
             hover_color=self.idea_dark_colors["gray_button_hover"],
-            border_color=self.idea_dark_colors["gray_button_border"]
+            border_color=self.idea_dark_colors["gray_button_border"],
         )
-        self.decrypt_radio.pack(side='left')
+        self.decrypt_radio.pack(side="left")
 
         # 开始执行按钮
         self.execute_button = PrimaryButton(
-            parent,
-            text="🚀 开始执行",
-            command=self.start_task
+            parent, text="🚀 开始执行", command=self.start_task
         )
-        self.execute_button.pack(anchor='w', fill='x', pady=(10, 0))
+        self.execute_button.pack(anchor="w", fill="x", pady=(10, 0))
 
     def get_config_dict(self):
         """返回要保存的配置字典"""
         return {
-            'mapping_file': self.mapping_selector.get_path(),
-            'input_folder': self.input_selector.get_path(),
-            'mode': self.mode_var.get()
+            "mapping_file": self.mapping_selector.get_path(),
+            "input_folder": self.input_selector.get_path(),
+            "mode": self.mode_var.get(),
         }
 
     def apply_config(self, config):
         """应用加载的配置"""
         try:
             # 设置映射文件路径
-            mapping_file = config.get('mapping_file', '')
+            mapping_file = config.get("mapping_file", "")
             if mapping_file:
                 self.mapping_selector.set_path(mapping_file)
 
             # 设置输入文件夹路径
-            input_folder = config.get('input_folder', '')
+            input_folder = config.get("input_folder", "")
             if input_folder:
                 self.input_selector.set_path(input_folder)
 
             # 设置操作模式
-            self.mode_var.set(config.get('mode', 'encrypt'))
+            self.mode_var.set(config.get("mode", "encrypt"))
 
             if self.logger:
                 self.logger.info("配置已加载")
@@ -143,7 +140,7 @@ class UpdateCsvPage(BaseToolPage):
         self.run_task(
             button_widget=self.execute_button,
             button_text="🚀 开始执行",
-            running_text="处理中..."
+            running_text="处理中...",
         )
 
     def execute_task(self):
@@ -157,7 +154,7 @@ class UpdateCsvPage(BaseToolPage):
         mode = self.mode_var.get()
 
         if self.logger:
-            mode_text = "加密" if mode == 'encrypt' else "解密"
+            mode_text = "加密" if mode == "encrypt" else "解密"
             self.logger.info(f"开始{mode_text}处理...")
             self.logger.info(f"映射文件: {mapping_file}")
             self.logger.info(f"输入文件夹: {input_folder}")
@@ -166,10 +163,12 @@ class UpdateCsvPage(BaseToolPage):
             # 加载映射关系
             table_mapping, column_mapping = load_mapping(mapping_file, mode)
             # 处理CSV文件
-            result = process_csv_files(input_folder, table_mapping, column_mapping, mode)
+            result = process_csv_files(
+                input_folder, table_mapping, column_mapping, mode
+            )
 
             if result["success"]:
-                mode_text = "加密" if mode == 'encrypt' else "解密"
+                mode_text = "加密" if mode == "encrypt" else "解密"
                 if self.logger:
                     self.logger.info(f"{mode_text}处理完成")
             else:

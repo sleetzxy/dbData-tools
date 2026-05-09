@@ -2,6 +2,7 @@
 
 从 ``main_gui.py`` 抽出，让仓库根入口仅保留启动逻辑。
 """
+
 from __future__ import annotations
 
 import logging
@@ -60,29 +61,26 @@ class MainApplication:
         # 使用公共方法初始化CTk主题
         init_theme(ctk)
 
-
     def _setup_ui(self):
         """初始化用户界面"""
         import customtkinter as ctk
 
         # 主容器
         self.main_container = ctk.CTkFrame(
-            self.root,
-            corner_radius=0,
-            fg_color=self.idea_dark_colors["bg"]
+            self.root, corner_radius=0, fg_color=self.idea_dark_colors["bg"]
         )
-        self.main_container.pack(fill='both', expand=True)
+        self.main_container.pack(fill="both", expand=True)
 
         # 创建左侧图标菜单栏
         self._create_simple_sidebar()
 
         # 右侧面板（包含内容区和底部版权栏）
         self.right_panel = ctk.CTkFrame(
-            self.main_container,
-            corner_radius=0,
-            fg_color=self.idea_dark_colors["bg"]
+            self.main_container, corner_radius=0, fg_color=self.idea_dark_colors["bg"]
         )
-        self.right_panel.pack(side='left', fill='both', expand=True, padx=(2, 0), pady=0)
+        self.right_panel.pack(
+            side="left", fill="both", expand=True, padx=(2, 0), pady=0
+        )
 
         # 主内容区域（页容器）
         self.content_frame = ctk.CTkFrame(
@@ -90,24 +88,24 @@ class MainApplication:
             corner_radius=0,
             fg_color=self.idea_dark_colors["bg_secondary"],
             border_width=1,
-            border_color=self.idea_dark_colors["border"]
+            border_color=self.idea_dark_colors["border"],
         )
-        self.content_frame.pack(side='top', fill='both', expand=True,pady=(0,1))
+        self.content_frame.pack(side="top", fill="both", expand=True, pady=(0, 1))
 
         # 底部固定版权信息栏（始终可见）
         self.footer_bar = ctk.CTkFrame(
             self.right_panel,
             height=26,
             corner_radius=0,
-            fg_color=self.idea_dark_colors["sidebar_bg"]
+            fg_color=self.idea_dark_colors["sidebar_bg"],
         )
-        self.footer_bar.pack(side='bottom', fill='x',pady=(1,0))
+        self.footer_bar.pack(side="bottom", fill="x", pady=(1, 0))
         ctk.CTkLabel(
             self.footer_bar,
             text="© 2025 zhangxueyu - DB Data Tools",
-            anchor='center',
-            font=('Microsoft YaHei', 9),
-            text_color=self.idea_dark_colors["text_secondary"]
+            anchor="center",
+            font=("Microsoft YaHei", 9),
+            text_color=self.idea_dark_colors["text_secondary"],
         ).pack(pady=0)
 
         # 绑定窗口关闭事件
@@ -127,14 +125,14 @@ class MainApplication:
             self.main_container,
             width=40,
             corner_radius=0,
-            fg_color=self.idea_dark_colors["sidebar_bg"]
+            fg_color=self.idea_dark_colors["sidebar_bg"],
         )
-        self.sidebar.pack(side='left', fill='y', padx=0, pady=0)
+        self.sidebar.pack(side="left", fill="y", padx=0, pady=0)
         self.sidebar.pack_propagate(False)
 
         # 按钮容器 - 使用垂直布局
         buttons_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        buttons_frame.pack(fill='both', expand=True, padx=0, pady=10)
+        buttons_frame.pack(fill="both", expand=True, padx=0, pady=10)
 
         # 工具按钮列表
         self.tools_data = [
@@ -157,31 +155,24 @@ class MainApplication:
 
         # 分隔线
         separator = ctk.CTkFrame(
-            buttons_frame,
-            height=2,
-            fg_color=self.idea_dark_colors["border"]
+            buttons_frame, height=2, fg_color=self.idea_dark_colors["border"]
         )
-        separator.pack(fill='x', pady=10, padx=8)
+        separator.pack(fill="x", pady=10, padx=8)
 
         # 连接管理按钮
         self.conn_btn = self._create_menu_button(
-            buttons_frame,
-            "🔗",
-            "数据库连接管理",
-            self._show_connection_manager
+            buttons_frame, "🔗", "数据库连接管理", self._show_connection_manager
         )
 
         # 首页按钮
         self.home_btn = self._create_menu_button(
-            buttons_frame,
-            "🏠",
-            "首页",
-            self.show_welcome,
-            highlighted=True
+            buttons_frame, "🏠", "首页", self.show_welcome, highlighted=True
         )
 
         # 弹簧空间
-        ctk.CTkFrame(buttons_frame, fg_color="transparent", height=0).pack(fill='x', expand=True)
+        ctk.CTkFrame(buttons_frame, fg_color="transparent", height=0).pack(
+            fill="x", expand=True
+        )
 
         # 退出按钮
         self.exit_btn = self._create_menu_button(
@@ -189,10 +180,12 @@ class MainApplication:
             "✕",
             "退出应用",
             self.root.quit,
-            color=self.idea_dark_colors["error"]
+            color=self.idea_dark_colors["error"],
         )
 
-    def _create_menu_button(self, parent, icon, text, command, highlighted=False, color=None):
+    def _create_menu_button(
+        self, parent, icon, text, command, highlighted=False, color=None
+    ):
         """创建菜单按钮"""
         import customtkinter as ctk
 
@@ -214,19 +207,23 @@ class MainApplication:
             parent,
             text=icon,
             # 使用包装后的 command，可靠隐藏提示
-            command=lambda b=None, cmd=command: _wrapped_command(btn if b is None else b, cmd),
+            command=lambda b=None, cmd=command: _wrapped_command(
+                btn if b is None else b, cmd
+            ),
             width=34,
             height=34,
             corner_radius=4,
-            font=('Segoe UI', 13),
-            fg_color=self.idea_dark_colors["button_hover"] if highlighted else "transparent",
+            font=("Segoe UI", 13),
+            fg_color=self.idea_dark_colors["button_hover"]
+            if highlighted
+            else "transparent",
             hover_color=color if color else self.idea_dark_colors["button_hover"],
             border_width=0,
-            anchor='center'
+            anchor="center",
         )
 
         if icon == "✕":  # 退出按钮特殊样式
-            btn.configure(font=('Segoe UI', 14, 'bold'))
+            btn.configure(font=("Segoe UI", 14, "bold"))
 
         btn.pack(pady=4)
 
@@ -234,7 +231,7 @@ class MainApplication:
         self.tooltip_manager.bind_tooltip(btn, text)
 
         # 绑定鼠标移动事件，确保鼠标在按钮间移动时提示能正确更新
-        btn.bind('<Motion>', lambda e, b=btn, t=text: self._on_button_motion(b, t))
+        btn.bind("<Motion>", lambda e, b=btn, t=text: self._on_button_motion(b, t))
 
         return btn
 
@@ -251,18 +248,21 @@ class MainApplication:
         self._reset_menu_buttons()
         self.conn_btn.configure(fg_color=self.idea_dark_colors["button_hover"])
         # 以页面形式显示，并传入统一主题和更新回调
-        self._show_page('connections', builder=lambda parent: ConnectionManager(
-            parent,
-            on_connections_updated=self._on_connections_updated,
-            theme=self.idea_dark_colors
-        ))
+        self._show_page(
+            "connections",
+            builder=lambda parent: ConnectionManager(
+                parent,
+                on_connections_updated=self._on_connections_updated,
+                theme=self.idea_dark_colors,
+            ),
+        )
 
     def _on_connections_updated(self):
         """连接更新后的回调 - 刷新所有已打开页面的连接列表"""
         # 遍历所有已创建的页面，如果有 load_connections_and_update 方法就调用
         for page_name, page in self.pages.items():
-            if page_name != 'connections' and page_name != 'welcome':
-                if hasattr(page, 'load_connections_and_update'):
+            if page_name != "connections" and page_name != "welcome":
+                if hasattr(page, "load_connections_and_update"):
                     try:
                         page.load_connections_and_update()
                     except Exception as e:
@@ -277,9 +277,9 @@ class MainApplication:
                 "changes": [
                     "新增数据迁移功能，支持指定多表从源库迁移到目标库",
                     "支持 PostgreSQL 与 ClickHouse 同构及异构迁移",
-                    "可选迁移前清空目标表（TRUNCATE）"
+                    "可选迁移前清空目标表（TRUNCATE）",
                 ],
-                "color": self.idea_dark_colors["accent"]
+                "color": self.idea_dark_colors["accent"],
             },
             {
                 "version": "1.3.0",
@@ -287,28 +287,27 @@ class MainApplication:
                 "changes": [
                     "新增 ClickHouse 数据库支持（CSV 导入、CSV 导出、SQL 导出）",
                     "数据库连接管理支持多类型（PostgreSQL / ClickHouse）",
-                    "工具集更名为 DB 数据工具集，兼容多种数据库"
+                    "工具集更名为 DB 数据工具集，兼容多种数据库",
                 ],
-                "color": self.idea_dark_colors["accent"]
+                "color": self.idea_dark_colors["accent"],
             },
             {
                 "version": "1.2.2",
                 "date": "2025-12-23",
                 "changes": ["支持常见压缩算法的zip解压"],
-                "color": self.idea_dark_colors["text_secondary"]
+                "color": self.idea_dark_colors["text_secondary"],
             },
             {
                 "version": "1.2.1",
                 "date": "2025-12-08",
                 "changes": ["修复数据库连接缺失模式字段bug"],
-                "color": self.idea_dark_colors["text_secondary"]
+                "color": self.idea_dark_colors["text_secondary"],
             },
             {
                 "version": "1.2.0",
                 "date": "2025-12-01",
                 "changes": ["新增CSV按指定数据类型导入功能", "优化UI布局"],
-
-                "color": self.idea_dark_colors["text_secondary"]
+                "color": self.idea_dark_colors["text_secondary"],
             },
             {
                 "version": "1.1.0",
@@ -316,19 +315,16 @@ class MainApplication:
                 "changes": [
                     "新增ZIP压缩文件导入功能",
                     "支持基本的数据库连接管理",
-                    "增强数据验证和错误处理机制"
+                    "增强数据验证和错误处理机制",
                 ],
-                "color": self.idea_dark_colors["text_secondary"]
+                "color": self.idea_dark_colors["text_secondary"],
             },
             {
                 "version": "1.0.0",
                 "date": "2025-04-01",
-                "changes": [
-                    "初始版本正式发布",
-                    "实现基础数据导入导出功能"
-                ],
-                "color": self.idea_dark_colors["text_secondary"]
-            }
+                "changes": ["初始版本正式发布", "实现基础数据导入导出功能"],
+                "color": self.idea_dark_colors["text_secondary"],
+            },
         ]
 
     def _show_page(self, name, builder=None):
@@ -355,10 +351,10 @@ class MainApplication:
         target = self.pages.get(name)
         if target:
             # 首页需要外边距，其他页面不需要
-            if name == 'welcome':
-                target.pack(fill='both', expand=True, padx=20, pady=20)
+            if name == "welcome":
+                target.pack(fill="both", expand=True, padx=20, pady=20)
             else:
-                target.pack(fill='both', expand=True)
+                target.pack(fill="both", expand=True)
             self.current_page = name
 
     def _build_welcome_page(self, parent):
@@ -367,8 +363,7 @@ class MainApplication:
 
         # 主容器（不在这里 pack，让 _show_page 统一处理）
         main_container = ctk.CTkFrame(
-            parent,
-            fg_color=self.idea_dark_colors["bg_secondary"]
+            parent, fg_color=self.idea_dark_colors["bg_secondary"]
         )
 
         # 欢迎标题
@@ -378,55 +373,51 @@ class MainApplication:
         ctk.CTkLabel(
             welcome_frame,
             text="DB 数据工具集",
-            font=('Microsoft YaHei', 22, 'bold'),
-            text_color=self.idea_dark_colors["text_primary"]
+            font=("Microsoft YaHei", 22, "bold"),
+            text_color=self.idea_dark_colors["text_primary"],
         ).pack()
 
         logs = self.get_changelog_data()
-        latest_version = logs[0]['version'] if logs else "未知"
+        latest_version = logs[0]["version"] if logs else "未知"
         ctk.CTkLabel(
             welcome_frame,
             text=f"版本 {latest_version}",
-            font=('Microsoft YaHei', 13),
-            text_color=self.idea_dark_colors["text_secondary"]
+            font=("Microsoft YaHei", 13),
+            text_color=self.idea_dark_colors["text_secondary"],
         ).pack(pady=(5, 0))
-
 
         # 更新日志标题
         changelog_header = ctk.CTkFrame(main_container, fg_color="transparent")
-        changelog_header.pack(fill='x', pady=(10, 10))
+        changelog_header.pack(fill="x", pady=(10, 10))
 
         ctk.CTkLabel(
             changelog_header,
             text="📝 更新日志",
-            font=('Microsoft YaHei', 16, 'bold'),
-            anchor='w',
-            text_color=self.idea_dark_colors["text_primary"]
-        ).pack(side='left')
+            font=("Microsoft YaHei", 16, "bold"),
+            anchor="w",
+            text_color=self.idea_dark_colors["text_primary"],
+        ).pack(side="left")
 
         # 更新日志容器
         changelog_container = ctk.CTkFrame(
-            main_container,
-            corner_radius=6,
-            fg_color=self.idea_dark_colors["card_bg"]
+            main_container, corner_radius=6, fg_color=self.idea_dark_colors["card_bg"]
         )
-        changelog_container.pack(fill='both', expand=True)
+        changelog_container.pack(fill="both", expand=True)
 
         # 创建滚动区域
         canvas = tk.Canvas(
             changelog_container,
             highlightthickness=0,
-            bg=self.idea_dark_colors["card_bg"]
+            bg=self.idea_dark_colors["card_bg"],
         )
         scrollbar = ctk.CTkScrollbar(
-            changelog_container,
-            orientation="vertical",
-            command=canvas.yview
+            changelog_container, orientation="vertical", command=canvas.yview
         )
         # 统一CTkScrollbar样式
 
-
-        scrollable_frame = ctk.CTkFrame(canvas, fg_color=self.idea_dark_colors["card_bg"])
+        scrollable_frame = ctk.CTkFrame(
+            canvas, fg_color=self.idea_dark_colors["card_bg"]
+        )
 
         def configure_canvas(e):
             canvas.configure(scrollregion=canvas.bbox("all"))
@@ -445,46 +436,45 @@ class MainApplication:
         # 返回主容器
         return main_container
 
-
     def _create_changelog_entry(self, parent, log_data):
         """创建更新日志条目"""
         import customtkinter as ctk
 
         entry_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        entry_frame.pack(fill='x', pady=6)
+        entry_frame.pack(fill="x", pady=6)
 
         # 版本和日期
         header_frame = ctk.CTkFrame(entry_frame, fg_color="transparent")
-        header_frame.pack(fill='x')
+        header_frame.pack(fill="x")
 
         version_label = ctk.CTkLabel(
             header_frame,
             text=f"版本 {log_data['version']}",
-            font=('Microsoft YaHei', 11, 'bold'),
-            text_color=log_data['color']
+            font=("Microsoft YaHei", 11, "bold"),
+            text_color=log_data["color"],
         )
-        version_label.pack(side='left')
+        version_label.pack(side="left")
 
         date_label = ctk.CTkLabel(
             header_frame,
             text=f"发布于 {log_data['date']}",
-            font=('Microsoft YaHei', 9),
-            text_color=self.idea_dark_colors["text_secondary"]
+            font=("Microsoft YaHei", 9),
+            text_color=self.idea_dark_colors["text_secondary"],
         )
-        date_label.pack(side='left', padx=(8, 0))
+        date_label.pack(side="left", padx=(8, 0))
 
         # 更新内容
         content_frame = ctk.CTkFrame(entry_frame, fg_color="transparent")
-        content_frame.pack(fill='x', padx=(12, 0), pady=(3, 0))
+        content_frame.pack(fill="x", padx=(12, 0), pady=(3, 0))
 
-        for change in log_data['changes']:
+        for change in log_data["changes"]:
             ctk.CTkLabel(
                 content_frame,
                 text=f"• {change}",
-                font=('Microsoft YaHei', 10),
+                font=("Microsoft YaHei", 10),
                 text_color=self.idea_dark_colors["text_primary"],
-                anchor='w'
-            ).pack(anchor='w')
+                anchor="w",
+            ).pack(anchor="w")
 
     def _reset_menu_buttons(self):
         """重置菜单按钮样式"""
@@ -505,55 +495,57 @@ class MainApplication:
         self._reset_menu_buttons()
         self.home_btn.configure(fg_color=self.idea_dark_colors["button_hover"])
         # 切换到持久化的欢迎页
-        self._show_page('welcome', builder=self._build_welcome_page)
+        self._show_page("welcome", builder=self._build_welcome_page)
 
     def load_importer(self):
         """加载CSV导入工具（持久化页面切换）"""
         self._reset_menu_buttons()
-        btn = self.command_to_button.get('load_importer')
+        btn = self.command_to_button.get("load_importer")
         if btn:
             btn.configure(fg_color=self.idea_dark_colors["button_hover"])
-        self._show_page('importer', builder=lambda parent: ImportCsvApp(parent))
+        self._show_page("importer", builder=lambda parent: ImportCsvApp(parent))
 
     def load_importer_type(self):
         """加载CSV指定类型导入工具（持久化页面切换）"""
         self._reset_menu_buttons()
-        btn = self.command_to_button.get('load_importer_type')
+        btn = self.command_to_button.get("load_importer_type")
         if btn:
             btn.configure(fg_color=self.idea_dark_colors["button_hover"])
-        self._show_page('importer_type', builder=lambda parent: ImportCsvTypeApp(parent))
+        self._show_page(
+            "importer_type", builder=lambda parent: ImportCsvTypeApp(parent)
+        )
 
     def load_exporter(self):
         """加载CSV导出工具（持久化页面切换）"""
         self._reset_menu_buttons()
-        btn = self.command_to_button.get('load_exporter')
+        btn = self.command_to_button.get("load_exporter")
         if btn:
             btn.configure(fg_color=self.idea_dark_colors["button_hover"])
-        self._show_page('exporter_csv', builder=lambda parent: ExportCsvApp(parent))
+        self._show_page("exporter_csv", builder=lambda parent: ExportCsvApp(parent))
 
     def load_updater(self):
         """加载CSV加解密工具（持久化页面切换）"""
         self._reset_menu_buttons()
-        btn = self.command_to_button.get('load_updater')
+        btn = self.command_to_button.get("load_updater")
         if btn:
             btn.configure(fg_color=self.idea_dark_colors["button_hover"])
-        self._show_page('updater', builder=lambda parent: UpdateCsvApp(parent))
+        self._show_page("updater", builder=lambda parent: UpdateCsvApp(parent))
 
     def load_db_exporter(self):
         """加载数据库导出工具（持久化页面切换）"""
         self._reset_menu_buttons()
-        btn = self.command_to_button.get('load_db_exporter')
+        btn = self.command_to_button.get("load_db_exporter")
         if btn:
             btn.configure(fg_color=self.idea_dark_colors["button_hover"])
-        self._show_page('exporter_db', builder=lambda parent: ExportDbApp(parent))
+        self._show_page("exporter_db", builder=lambda parent: ExportDbApp(parent))
 
     def load_migrator(self):
         """加载数据迁移工具（持久化页面切换）"""
         self._reset_menu_buttons()
-        btn = self.command_to_button.get('load_migrator')
+        btn = self.command_to_button.get("load_migrator")
         if btn:
             btn.configure(fg_color=self.idea_dark_colors["button_hover"])
-        self._show_page('migrator', builder=lambda parent: MigratorPage(parent))
+        self._show_page("migrator", builder=lambda parent: MigratorPage(parent))
 
     def clear_content(self):
         """清空内容区域（不销毁，仅隐藏以避免Tk命令失效）"""

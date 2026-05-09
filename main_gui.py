@@ -3,6 +3,7 @@
 仅负责创建 customtkinter 根窗口、装配 :class:`MainApplication` 并进入事件循环；
 具体页面装配与 tooltip 等实现位于 :mod:`gui.app` 与 :mod:`gui.widgets.tooltip`。
 """
+
 from __future__ import annotations
 
 import logging
@@ -32,8 +33,7 @@ def main() -> None:
     except Exception as e:
         logger.error(f"应用程序错误: {e}", exc_info=True)
         messagebox.showerror(
-            "应用程序错误",
-            f"程序遇到错误:\n{str(e)}\n\n详细信息请查看日志文件"
+            "应用程序错误", f"程序遇到错误:\n{str(e)}\n\n详细信息请查看日志文件"
         )
 
 

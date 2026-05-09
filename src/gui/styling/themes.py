@@ -26,6 +26,7 @@ def get_idea_dark_colors():
         "scrollbar_hover": "#6c6f72",
     }
 
+
 def init_theme(ctk):
     """初始化 customtkinter 的深色主题设置"""
     try:

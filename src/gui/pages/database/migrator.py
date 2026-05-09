@@ -1,12 +1,16 @@
 """
 数据迁移页面 - 支持 PostgreSQL / ClickHouse 同构及异构迁移
 """
+
 import tkinter as tk
 from tkinter import messagebox
 
 from gui.base import BaseToolPage
 from gui.components import ConnectionSelector
-from gui.widgets.labels import TitleLabel, StyledLabel  # StyledLabel used in table input label
+from gui.widgets.labels import (
+    TitleLabel,
+    StyledLabel,
+)  # StyledLabel used in table input label
 from gui.widgets.buttons import PrimaryButton
 from gui.widgets.scrolled_texts import StyledScrolledText
 from core.migrator import migrate_tables, logger as core_logger
@@ -27,7 +31,7 @@ class MigratorPage(BaseToolPage):
             root=root,
             config_file=self.CONFIG_FILE,
             log_title="📋 迁移日志",
-            core_logger=core_logger
+            core_logger=core_logger,
         )
 
     def setup_left_panel_content(self, parent):
@@ -216,14 +220,14 @@ class MigratorPage(BaseToolPage):
         return True
 
     def on_task_success(self, result):
-        messagebox.showinfo("完成", f"数据迁移成功！共迁移 {result['total_rows']} 行数据。")
+        messagebox.showinfo(
+            "完成", f"数据迁移成功！共迁移 {result['total_rows']} 行数据。"
+        )
 
     def on_task_error(self, result):
         error_tables = result.get("error_tables", [])
         if error_tables:
-            detail = "\n".join(
-                f"• {t['name']}: {t['error']}" for t in error_tables
-            )
+            detail = "\n".join(f"• {t['name']}: {t['error']}" for t in error_tables)
             messagebox.showerror("部分表迁移失败", f"以下表迁移失败：\n{detail}")
         else:
             messagebox.showerror("错误", result.get("error", "迁移过程中发生错误"))

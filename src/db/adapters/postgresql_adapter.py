@@ -13,7 +13,9 @@ from core.importer_csv import generate_copy_commands, read_sql_from_file
 class PostgreSQLAdapter:
     db_type = "postgresql"
 
-    def create_client(self, db_config: Dict[str, Any]) -> psycopg2.extensions.connection:
+    def create_client(
+        self, db_config: Dict[str, Any]
+    ) -> psycopg2.extensions.connection:
         return psycopg2.connect(
             host=db_config["host"],
             port=db_config["port"],
@@ -116,7 +118,7 @@ class PostgreSQLAdapter:
                 end = text.find("$", start + 1)
                 if end == -1:
                     return None
-                tag = text[start:end + 1]
+                tag = text[start : end + 1]
                 inner = tag[1:-1]
                 if inner == "" or inner.replace("_", "").isalnum():
                     return tag
@@ -201,7 +203,11 @@ class PostgreSQLAdapter:
             if trailing:
                 statements.append(trailing)
 
-            return [stmt for stmt in statements if stmt and not stmt.strip().upper().startswith("DELIMITER ")]
+            return [
+                stmt
+                for stmt in statements
+                if stmt and not stmt.strip().upper().startswith("DELIMITER ")
+            ]
 
         sql_statements = split_sql_statements(pre_sql)
 
@@ -216,7 +222,9 @@ class PostgreSQLAdapter:
 
                 try:
                     sql_preview = (
-                        sql_statement[:100] + "..." if len(sql_statement) > 100 else sql_statement
+                        sql_statement[:100] + "..."
+                        if len(sql_statement) > 100
+                        else sql_statement
                     )
                     if logger:
                         logger.info(
@@ -228,7 +236,9 @@ class PostgreSQLAdapter:
                     affected = cursor.rowcount
                     if logger:
                         if affected >= 0:
-                            logger.info(f"SQL executed successfully, affected rows: {affected}")
+                            logger.info(
+                                f"SQL executed successfully, affected rows: {affected}"
+                            )
                         else:
                             logger.info("DDL executed successfully")
                 except Exception as exc:
@@ -239,7 +249,10 @@ class PostgreSQLAdapter:
                         logger.error(f"Error details: {str(exc)}")
 
                     error_str = str(exc).lower()
-                    if any(keyword in error_str for keyword in ["already exists", "duplicate", "exists"]):
+                    if any(
+                        keyword in error_str
+                        for keyword in ["already exists", "duplicate", "exists"]
+                    ):
                         if logger:
                             logger.warning("Object already exists, skipped current SQL")
                         continue
@@ -282,7 +295,9 @@ class PostgreSQLAdapter:
                 try:
                     output_file = os.path.join(export_dir, f"{table}.csv")
                     if logger:
-                        logger.info(f"Exporting table {schema}.{table} -> {output_file}")
+                        logger.info(
+                            f"Exporting table {schema}.{table} -> {output_file}"
+                        )
 
                     header_sql = sql.SQL(", HEADER") if include_header else sql.SQL("")
                     copy_command = sql.SQL(
@@ -383,7 +398,9 @@ class PostgreSQLAdapter:
 
             if need_backup:
                 backup_dir = os.path.join(data_dir, "backup")
-                result["backup_path"] = self._backup_tables(client, schema, table_names, backup_dir, logger)
+                result["backup_path"] = self._backup_tables(
+                    client, schema, table_names, backup_dir, logger
+                )
 
             if pre_sql_file:
                 try:
@@ -419,7 +436,11 @@ class PostgreSQLAdapter:
 
                         with open(csv_file, "r", encoding="utf-8") as f:
                             header_line = f.readline().strip()
-                            columns = [col.strip() for col in header_line.split(',') if col.strip()]
+                            columns = [
+                                col.strip()
+                                for col in header_line.split(",")
+                                if col.strip()
+                            ]
                             f.seek(0)
 
                             copy_sql = sql.SQL(
@@ -427,7 +448,9 @@ class PostgreSQLAdapter:
                             ).format(
                                 sql.Identifier(schema),
                                 sql.Identifier(table),
-                                sql.SQL(", ").join(sql.Identifier(col) for col in columns),
+                                sql.SQL(", ").join(
+                                    sql.Identifier(col) for col in columns
+                                ),
                             )
                             cursor.copy_expert(copy_sql.as_string(client), f)
 
@@ -445,9 +468,13 @@ class PostgreSQLAdapter:
                 client.commit()
                 result["imported_tables"] = imported_tables
                 if logger:
-                    logger.info("All tables imported successfully, committing transaction")
+                    logger.info(
+                        "All tables imported successfully, committing transaction"
+                    )
 
-                after_counts = self._get_table_counts(client, schema, table_names, logger)
+                after_counts = self._get_table_counts(
+                    client, schema, table_names, logger
+                )
                 if logger:
                     logger.info("Row counts after import:")
                     for table, count in after_counts.items():
@@ -497,7 +524,9 @@ class PostgreSQLAdapter:
         try:
             if hasattr(client, "set_isolation_level"):
                 try:
-                    client.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+                    client.set_isolation_level(
+                        psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT
+                    )
                 except Exception:
                     pass
 
@@ -517,9 +546,15 @@ class PostgreSQLAdapter:
                     tables = [t for t in tables if t not in exclude_tables]
 
                 if not tables:
-                    return {"success": False, "error": "No exportable tables found", "schema": schema}
+                    return {
+                        "success": False,
+                        "error": "No exportable tables found",
+                        "schema": schema,
+                    }
 
-                os.makedirs(os.path.dirname(os.path.abspath(export_file)), exist_ok=True)
+                os.makedirs(
+                    os.path.dirname(os.path.abspath(export_file)), exist_ok=True
+                )
 
                 with open(export_file, "w", encoding="utf-8") as f:
                     f.write("-- Database export script\n")

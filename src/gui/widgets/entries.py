@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from gui.styling.themes import get_idea_dark_colors
 
+
 class StyledEntry(ctk.CTkEntry):
     def __init__(self, master, placeholder_text="", show=None, **kwargs):
         colors = get_idea_dark_colors()
@@ -12,7 +13,7 @@ class StyledEntry(ctk.CTkEntry):
             "text_color": colors["gray_button_fg"],
             "placeholder_text_color": colors["text_secondary"],
             "font": ("Microsoft YaHei", 10),
-            "height": 26
+            "height": 26,
         }
         if show:
             style["show"] = show

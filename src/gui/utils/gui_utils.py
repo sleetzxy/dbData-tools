@@ -1,5 +1,6 @@
 import tkinter as tk
 
+
 def safe_configure(widget, **kwargs):
     """安全地更新 Tk/CTk 控件属性，避免已销毁控件导致的 TclError"""
     try:

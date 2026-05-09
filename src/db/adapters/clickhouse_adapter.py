@@ -58,7 +58,9 @@ class ClickHouseAdapter:
             query = f"SELECT * FROM {qualified} FORMAT CSVWithNames"
 
             if logger:
-                logger.info(f"\u6b63\u5728\u5907\u4efd\u8868 {database}.{table_name} -> {backup_file}")
+                logger.info(
+                    f"\u6b63\u5728\u5907\u4efd\u8868 {database}.{table_name} -> {backup_file}"
+                )
 
             if hasattr(client, "raw_stream"):
                 stream = client.raw_stream(query)
@@ -74,11 +76,17 @@ class ClickHouseAdapter:
                         stream.close()
             elif hasattr(client, "raw_query"):
                 response = client.raw_query(query)
-                data = response if isinstance(response, bytes) else str(response).encode("utf-8")
+                data = (
+                    response
+                    if isinstance(response, bytes)
+                    else str(response).encode("utf-8")
+                )
                 with open(backup_file, "wb") as f:
                     f.write(data)
             else:
-                raise RuntimeError("ClickHouse client does not support raw backup query")
+                raise RuntimeError(
+                    "ClickHouse client does not support raw backup query"
+                )
 
         return backup_path
 
@@ -92,7 +100,9 @@ class ClickHouseAdapter:
         include_header: bool = True,
         logger: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        database = self._validate_identifier(str(db_config.get("database", "")).strip(), "database")
+        database = self._validate_identifier(
+            str(db_config.get("database", "")).strip(), "database"
+        )
         result = {
             "success": True,
             "exported_tables": [],
@@ -108,7 +118,9 @@ class ClickHouseAdapter:
                 table_name = self._validate_identifier(str(table).strip(), "table")
                 output_file = os.path.join(export_dir, f"{table_name}.csv")
                 if logger:
-                    logger.info(f"Exporting table {database}.{table_name} -> {output_file}")
+                    logger.info(
+                        f"Exporting table {database}.{table_name} -> {output_file}"
+                    )
 
                 format_name = "CSVWithNames" if include_header else "CSV"
                 qualified = f"{self._quote_identifier(database)}.{self._quote_identifier(table_name)}"
@@ -156,7 +168,9 @@ class ClickHouseAdapter:
                 )
 
                 if logger:
-                    logger.info(f"Export finished for {database}.{table_name}, rows: {row_count}")
+                    logger.info(
+                        f"Export finished for {database}.{table_name}, rows: {row_count}"
+                    )
             except Exception as exc:
                 error_msg = f"Export failed for {database}.{table}: {exc}"
                 if logger:
@@ -184,7 +198,9 @@ class ClickHouseAdapter:
         truncate_before: bool = True,
         logger: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        database = self._validate_identifier(str(db_config.get("database", "")).strip(), "database")
+        database = self._validate_identifier(
+            str(db_config.get("database", "")).strip(), "database"
+        )
         result = {
             "success": True,
             "imported_tables": [],
@@ -204,7 +220,9 @@ class ClickHouseAdapter:
                 pre_sql = read_sql_from_file(pre_sql_file)
                 for statement in self._split_sql_statements(pre_sql):
                     if logger:
-                        logger.info(f"\u6267\u884c\u9884\u5904\u7406 SQL: {statement[:100]}")
+                        logger.info(
+                            f"\u6267\u884c\u9884\u5904\u7406 SQL: {statement[:100]}"
+                        )
                     if hasattr(client, "command"):
                         client.command(statement)
             except Exception as exc:
@@ -240,7 +258,9 @@ class ClickHouseAdapter:
                 table_name = self._validate_identifier(str(table).strip(), "table")
                 qualified = f"{self._quote_identifier(database)}.{self._quote_identifier(table_name)}"
                 if logger:
-                    logger.info(f"\u6b63\u5728\u5bfc\u5165 {database}.{table_name} <- {csv_file}")
+                    logger.info(
+                        f"\u6b63\u5728\u5bfc\u5165 {database}.{table_name} <- {csv_file}"
+                    )
                 if hasattr(client, "command"):
                     if truncate_before:
                         client.command(f"TRUNCATE TABLE {qualified}")
@@ -255,7 +275,9 @@ class ClickHouseAdapter:
 
                 result["imported_tables"].append(table_name)
                 if logger:
-                    logger.info(f"\u8868 {database}.{table_name} \u5bfc\u5165\u5b8c\u6210")
+                    logger.info(
+                        f"\u8868 {database}.{table_name} \u5bfc\u5165\u5b8c\u6210"
+                    )
             except Exception as exc:
                 error_msg = f"\u5bfc\u5165 {database}.{table} \u5931\u8d25: {exc}"
                 if logger:
@@ -346,7 +368,9 @@ class ClickHouseAdapter:
         include_truncate = kwargs.get("include_truncate", True)
         logger = kwargs.get("logger")
 
-        database = self._validate_identifier(str(db_config.get("database", "")).strip(), "database")
+        database = self._validate_identifier(
+            str(db_config.get("database", "")).strip(), "database"
+        )
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         export_file = os.path.join(export_dir, f"{database}_{timestamp}.sql")
 
@@ -390,7 +414,11 @@ class ClickHouseAdapter:
             tables = sorted(tables)
 
             if not tables:
-                return {"success": False, "error": "No exportable tables found", "schema": ""}
+                return {
+                    "success": False,
+                    "error": "No exportable tables found",
+                    "schema": "",
+                }
 
             os.makedirs(os.path.dirname(os.path.abspath(export_file)), exist_ok=True)
 
@@ -428,9 +456,13 @@ class ClickHouseAdapter:
                     if rows:
                         if not column_names:
                             column_names = [f"col{i + 1}" for i in range(len(rows[0]))]
-                        columns_str = ", ".join(self._quote_identifier(name) for name in column_names)
+                        columns_str = ", ".join(
+                            self._quote_identifier(name) for name in column_names
+                        )
                         for row in rows:
-                            values_str = ", ".join(_serialize_value(value) for value in row)
+                            values_str = ", ".join(
+                                _serialize_value(value) for value in row
+                            )
                             f.write(
                                 f"INSERT INTO {qualified} ({columns_str}) VALUES ({values_str});\n"
                             )

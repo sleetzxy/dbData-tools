@@ -4,6 +4,7 @@
 将源库中指定的多张表通过临时 CSV 中转迁移到目标库。
 支持 PostgreSQL / ClickHouse 同构及异构迁移。
 """
+
 from __future__ import annotations
 
 import logging
@@ -64,6 +65,7 @@ def migrate_tables(
     # 获取 adapter
     if src_adapter is None or dst_adapter is None:
         from db.adapters import get_adapter_for_config
+
         if src_adapter is None:
             src_adapter = get_adapter_for_config(src_config)
         if dst_adapter is None:
@@ -95,10 +97,9 @@ def migrate_tables(
                     logger=logger,
                 )
                 if not export_result.get("success", True):
-                    err = (
-                        (export_result.get("error_tables") or [{}])[0].get("error")
-                        or export_result.get("error", "导出失败")
-                    )
+                    err = (export_result.get("error_tables") or [{}])[0].get(
+                        "error"
+                    ) or export_result.get("error", "导出失败")
                     raise RuntimeError(err)
 
                 exported = export_result.get("exported_tables", [])

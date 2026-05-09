@@ -1,6 +1,7 @@
 """
 基础页面类 - 所有工具页面的基类
 """
+
 import tkinter as tk
 import customtkinter as ctk
 import threading
@@ -31,7 +32,9 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
     - execute_task(): 执行主要任务 (在后台线程中运行)
     """
 
-    def __init__(self, root, config_file: str, log_title: str = "📋 操作日志", core_logger=None):
+    def __init__(
+        self, root, config_file: str, log_title: str = "📋 操作日志", core_logger=None
+    ):
         """
         初始化基础页面
 
@@ -57,29 +60,30 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
 
         # 配置管理器
         from utils.config_manager import ConfigManager
+
         self.config_manager = ConfigManager(config_file)
 
         # 主容器 - 左右分割布局
-        main_container = self.ctk.CTkFrame(self, corner_radius=0, fg_color=self.idea_dark_colors["bg"])
-        main_container.pack(fill='both', expand=True, padx=0, pady=0)
+        main_container = self.ctk.CTkFrame(
+            self, corner_radius=0, fg_color=self.idea_dark_colors["bg"]
+        )
+        main_container.pack(fill="both", expand=True, padx=0, pady=0)
 
         # 左侧配置面板
         left_panel = self.ctk.CTkFrame(
             main_container,
             width=420,
             corner_radius=0,
-            fg_color=self.idea_dark_colors["sidebar_bg"]
+            fg_color=self.idea_dark_colors["sidebar_bg"],
         )
-        left_panel.pack(side='left', fill='y', padx=(0, 1), pady=0)
+        left_panel.pack(side="left", fill="y", padx=(0, 1), pady=0)
         left_panel.pack_propagate(False)
 
         # 右侧日志面板
         right_panel = self.ctk.CTkFrame(
-            main_container,
-            corner_radius=0,
-            fg_color=self.idea_dark_colors["bg"]
+            main_container, corner_radius=0, fg_color=self.idea_dark_colors["bg"]
         )
-        right_panel.pack(side='left', fill='both', expand=True, padx=(1, 0), pady=0)
+        right_panel.pack(side="left", fill="both", expand=True, padx=(1, 0), pady=0)
 
         # 设置左侧面板
         self._setup_left_panel(left_panel, log_title)
@@ -112,7 +116,7 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
     def _setup_right_panel(self, parent, log_title):
         """设置右侧日志面板"""
         log_panel = LogPanel(parent, title=log_title)
-        log_panel.pack(fill='both', expand=True, padx=(1, 0), pady=0)
+        log_panel.pack(fill="both", expand=True, padx=(1, 0), pady=0)
         self.text_log = log_panel.text_log
 
     @abstractmethod
@@ -162,7 +166,7 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
         """保存当前配置"""
         config = self.get_config_dict()
         success = self.config_manager.save(config, self.core_logger)
-        if not success and hasattr(self, 'logger') and self.logger:
+        if not success and hasattr(self, "logger") and self.logger:
             self.logger.warning("配置保存失败")
 
     def load_and_apply_config(self):
@@ -171,17 +175,19 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
         if config:
             try:
                 self.apply_config(config)
-                if hasattr(self, 'logger') and self.logger:
+                if hasattr(self, "logger") and self.logger:
                     self.logger.info("配置已加载")
             except Exception as e:
                 error_msg = f"加载配置失败: {str(e)}"
-                if hasattr(self, 'logger') and self.logger:
+                if hasattr(self, "logger") and self.logger:
                     self.logger.error(error_msg)
         else:
-            if hasattr(self, 'logger') and self.logger:
+            if hasattr(self, "logger") and self.logger:
                 self.logger.info("未找到配置文件,使用默认设置")
 
-    def run_task(self, button_widget=None, button_text="🚀 开始", running_text="执行中..."):
+    def run_task(
+        self, button_widget=None, button_text="🚀 开始", running_text="执行中..."
+    ):
         """
         执行任务 (在后台线程中)
 
@@ -194,15 +200,15 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
         self.save_current_config()
 
         # 清空日志
-        if hasattr(self, 'text_log'):
+        if hasattr(self, "text_log"):
             self.text_log.delete(1.0, tk.END)
 
-        if hasattr(self, 'logger') and self.logger:
+        if hasattr(self, "logger") and self.logger:
             self.logger.info("开始执行任务...")
 
         # 禁用按钮
         if button_widget:
-            safe_configure(button_widget, state='disabled', text=running_text)
+            safe_configure(button_widget, state="disabled", text=running_text)
 
         def task():
             try:
@@ -211,16 +217,16 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
                 # 在主线程中更新 UI
                 def update_ui():
                     if button_widget:
-                        safe_configure(button_widget, state='normal', text=button_text)
+                        safe_configure(button_widget, state="normal", text=button_text)
 
                     if result.get("success"):
                         messagebox.showinfo("完成", "任务执行成功!")
-                        if hasattr(self, 'logger') and self.logger:
+                        if hasattr(self, "logger") and self.logger:
                             self.logger.info("任务执行成功完成")
                     else:
                         error_msg = result.get("error", "任务执行过程中发生错误")
                         messagebox.showerror("错误", error_msg)
-                        if hasattr(self, 'logger') and self.logger:
+                        if hasattr(self, "logger") and self.logger:
                             self.logger.error(f"任务失败: {error_msg}")
 
                 self.root.after(0, update_ui)
@@ -229,9 +235,9 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
                 # 在主线程中显示错误
                 def show_error():
                     if button_widget:
-                        safe_configure(button_widget, state='normal', text=button_text)
+                        safe_configure(button_widget, state="normal", text=button_text)
                     messagebox.showerror("错误", f"任务失败: {str(e)}")
-                    if hasattr(self, 'logger') and self.logger:
+                    if hasattr(self, "logger") and self.logger:
                         self.logger.exception("任务执行过程中发生异常")
 
                 self.root.after(0, show_error)

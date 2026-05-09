@@ -5,5 +5,6 @@
 from .exporter import ExportDbPage, ExportDbApp
 
 __all__ = [
-    'ExportDbPage', 'ExportDbApp',
+    "ExportDbPage",
+    "ExportDbApp",
 ]

@@ -1,6 +1,7 @@
 """
 重构后的 CSV 导入页面 - 使用新的基类和组件架构
 """
+
 import tkinter as tk
 import os
 import re
@@ -35,18 +36,18 @@ class ImportCsvPage(BaseToolPage):
             root=root,
             config_file=self.CONFIG_FILE,
             log_title="📋 导入日志",
-            core_logger=core_logger
+            core_logger=core_logger,
         )
 
     def setup_left_panel_content(self, parent):
         """设置左侧面板的具体内容"""
         # 标题
         title = TitleLabel(parent, text="📥 CSV 导入")
-        title.pack(anchor='w', pady=(0, 15))
+        title.pack(anchor="w", pady=(0, 15))
 
         # 数据库连接选择器
         self.connection_selector = ConnectionSelector(parent, label_text="数据库连接")
-        self.connection_selector.pack(fill='x', pady=(0, 15))
+        self.connection_selector.pack(fill="x", pady=(0, 15))
 
         # 设置连接变量引用 (用于兼容 ConnectionMixin)
         self.connection_var = self.connection_selector.connection_var
@@ -57,16 +58,20 @@ class ImportCsvPage(BaseToolPage):
         source_label = self.ctk.CTkLabel(
             parent,
             text="数据源类型",
-            font=('Microsoft YaHei', 11),
-            text_color=self.idea_dark_colors["text_secondary"]
+            font=("Microsoft YaHei", 11),
+            text_color=self.idea_dark_colors["text_secondary"],
         )
-        source_label.pack(anchor='w', pady=(0, 3))
+        source_label.pack(anchor="w", pady=(0, 3))
 
-        data_source_frame = self.ctk.CTkFrame(parent, fg_color=self.idea_dark_colors["card_bg"], corner_radius=8)
-        data_source_frame.pack(anchor='w', fill='x', pady=(0, 15))
+        data_source_frame = self.ctk.CTkFrame(
+            parent, fg_color=self.idea_dark_colors["card_bg"], corner_radius=8
+        )
+        data_source_frame.pack(anchor="w", fill="x", pady=(0, 15))
 
         # 内部容器,用于居中对齐单选按钮
-        data_source_inner_frame = self.ctk.CTkFrame(data_source_frame, fg_color=self.idea_dark_colors["card_bg"])
+        data_source_inner_frame = self.ctk.CTkFrame(
+            data_source_frame, fg_color=self.idea_dark_colors["card_bg"]
+        )
         data_source_inner_frame.pack(pady=15)
 
         self.zip_radio = self.ctk.CTkRadioButton(
@@ -75,13 +80,13 @@ class ImportCsvPage(BaseToolPage):
             variable=self.data_source_var,
             value="zip",
             command=self.toggle_data_source,
-            font=('Microsoft YaHei', 10),
+            font=("Microsoft YaHei", 10),
             text_color=self.idea_dark_colors["text_primary"],
             fg_color=self.idea_dark_colors["gray_button"],
             hover_color=self.idea_dark_colors["gray_button_hover"],
-            border_color=self.idea_dark_colors["gray_button_border"]
+            border_color=self.idea_dark_colors["gray_button_border"],
         )
-        self.zip_radio.pack(side='left', padx=(20, 30))
+        self.zip_radio.pack(side="left", padx=(20, 30))
 
         self.folder_radio = self.ctk.CTkRadioButton(
             data_source_inner_frame,
@@ -89,84 +94,85 @@ class ImportCsvPage(BaseToolPage):
             variable=self.data_source_var,
             value="folder",
             command=self.toggle_data_source,
-            font=('Microsoft YaHei', 10),
+            font=("Microsoft YaHei", 10),
             text_color=self.idea_dark_colors["text_primary"],
             fg_color=self.idea_dark_colors["gray_button"],
             hover_color=self.idea_dark_colors["gray_button_hover"],
-            border_color=self.idea_dark_colors["gray_button_border"]
+            border_color=self.idea_dark_colors["gray_button_border"],
         )
-        self.folder_radio.pack(side='left')
+        self.folder_radio.pack(side="left")
 
         # 数据源路径选择器
         self.path_selector = PathSelector(parent, label_text="数据源路径", mode="zip")
-        self.path_selector.pack(fill='x', pady=(0, 15))
+        self.path_selector.pack(fill="x", pady=(0, 15))
         self.path_selector.set_callback(self.on_path_selected)
 
         # ZIP 密码
         self.zip_password_label = StyledLabel(parent, text="ZIP文件密码")
-        self.zip_password_label.pack(anchor='w', pady=(0, 3))
+        self.zip_password_label.pack(anchor="w", pady=(0, 3))
 
         self.archive_password_var = tk.StringVar()
         self.zip_password_entry = StyledEntry(
-            parent,
-            textvariable=self.archive_password_var
+            parent, textvariable=self.archive_password_var
         )
-        self.zip_password_entry.pack(anchor='w', fill='x', pady=(0, 3))
+        self.zip_password_entry.pack(anchor="w", fill="x", pady=(0, 3))
 
         self.zip_password_optional = self.ctk.CTkLabel(
             parent,
             text="(可选,文件夹类型非必填)",
-            font=('Microsoft YaHei', 9),
-            text_color=self.idea_dark_colors["text_secondary"]
+            font=("Microsoft YaHei", 9),
+            text_color=self.idea_dark_colors["text_secondary"],
         )
-        self.zip_password_optional.pack(anchor='w', pady=(0, 15))
+        self.zip_password_optional.pack(anchor="w", pady=(0, 15))
 
         # 导入前执行 SQL
         sql_label = StyledLabel(parent, text="导入前SQL脚本")
-        sql_label.pack(anchor='w', pady=(0, 3))
+        sql_label.pack(anchor="w", pady=(0, 3))
 
         self.pre_sql_selector = PathSelector(
             parent,
             label_text="",
             mode="file",
-            file_types=[("SQL文件", "*.sql"), ("文本文件", "*.txt"), ("所有文件", "*.*")]
+            file_types=[
+                ("SQL文件", "*.sql"),
+                ("文本文件", "*.txt"),
+                ("所有文件", "*.*"),
+            ],
         )
-        self.pre_sql_selector.pack(fill='x', pady=(0, 15))
+        self.pre_sql_selector.pack(fill="x", pady=(0, 15))
 
         # 备份选项
         backup_checkbox_frame = self.ctk.CTkFrame(parent, fg_color="transparent")
-        backup_checkbox_frame.pack(anchor='w', pady=(0, 15))
+        backup_checkbox_frame.pack(anchor="w", pady=(0, 15))
 
         self.backup_var = tk.BooleanVar(value=True)
         self.backup_checkbox = self.ctk.CTkCheckBox(
             backup_checkbox_frame,
             text="导入前备份数据",
             variable=self.backup_var,
-            font=('Microsoft YaHei', 10),
+            font=("Microsoft YaHei", 10),
             text_color=self.idea_dark_colors["text_primary"],
             fg_color=self.idea_dark_colors["gray_button"],
             hover_color=self.idea_dark_colors["gray_button_hover"],
             border_color=self.idea_dark_colors["gray_button_border"],
-            checkmark_color=self.idea_dark_colors["text_primary"]
+            checkmark_color=self.idea_dark_colors["text_primary"],
         )
-        self.backup_checkbox.pack(side='left')
+        self.backup_checkbox.pack(side="left")
 
         # 开始导入按钮
         self.import_button = PrimaryButton(
-            parent,
-            text="🚀 开始导入",
-            command=self.start_import
+            parent, text="🚀 开始导入", command=self.start_import
         )
-        self.import_button.pack(anchor='w', fill='x', pady=(10, 0))
+        self.import_button.pack(anchor="w", fill="x", pady=(10, 0))
 
     def toggle_data_source(self):
         """切换数据源类型时更新控件状态"""
         source_type = self.data_source_var.get()
         if source_type == "zip":
-            self.zip_password_entry.configure(state='normal')
+            self.zip_password_entry.configure(state="normal")
             self.path_selector.mode = "zip"
         else:
-            self.zip_password_entry.configure(state='disabled')
+            self.zip_password_entry.configure(state="disabled")
             self.path_selector.mode = "folder"
 
     def on_path_selected(self, path):
@@ -179,11 +185,13 @@ class ImportCsvPage(BaseToolPage):
             password = self.get_zip_password(zip_name)
             if password:
                 self.archive_password_var.set(password)
-                if hasattr(self, 'logger') and self.logger:
+                if hasattr(self, "logger") and self.logger:
                     self.logger.info(f"根据文件名识别到ZIP密码: {password}")
 
-        if hasattr(self, 'logger') and self.logger:
-            self.logger.info(f"已选择{'ZIP文件' if source_type == 'zip' else '文件夹'}: {path}")
+        if hasattr(self, "logger") and self.logger:
+            self.logger.info(
+                f"已选择{'ZIP文件' if source_type == 'zip' else '文件夹'}: {path}"
+            )
 
     def get_zip_password(self, zip_filename: str) -> str:
         """
@@ -197,7 +205,9 @@ class ImportCsvPage(BaseToolPage):
         city_name = city_match.group(1)[:2]  # 前两个字
 
         # 获取拼音首字母并转大写
-        initials = "".join([p[0].upper() for p in lazy_pinyin(city_name, style=Style.FIRST_LETTER)])
+        initials = "".join(
+            [p[0].upper() for p in lazy_pinyin(city_name, style=Style.FIRST_LETTER)]
+        )
 
         # 提取日期 (8位数字)
         date_match = re.search(r"(20\d{6})", zip_filename)
@@ -213,41 +223,45 @@ class ImportCsvPage(BaseToolPage):
         self.run_task(
             button_widget=self.import_button,
             button_text="🚀 开始导入",
-            running_text="导入中..."
+            running_text="导入中...",
         )
 
     def get_config_dict(self):
         """返回要保存的配置字典"""
         return {
-            'selected_connection_name': self.get_selected_connection_name(),
-            'data_source_type': self.data_source_var.get(),
-            'pre_sql_file': self.pre_sql_selector.get_path(),
-            'data_path': self.path_selector.get_path(),
-            'archive_password': self.archive_password_var.get(),
-            'need_backup': self.backup_var.get()
+            "selected_connection_name": self.get_selected_connection_name(),
+            "data_source_type": self.data_source_var.get(),
+            "pre_sql_file": self.pre_sql_selector.get_path(),
+            "data_path": self.path_selector.get_path(),
+            "archive_password": self.archive_password_var.get(),
+            "need_backup": self.backup_var.get(),
         }
 
     def apply_config(self, config):
         """应用加载的配置"""
         # 连接选择
-        selected_name = config.get('selected_connection_name')
+        selected_name = config.get("selected_connection_name")
         if selected_name:
             idx = self.find_connection_index_by_name(selected_name)
-            if idx is not None and hasattr(self, 'connection_names') and 0 <= idx < len(self.connection_names):
+            if (
+                idx is not None
+                and hasattr(self, "connection_names")
+                and 0 <= idx < len(self.connection_names)
+            ):
                 self.connection_selector.set_value(self.connection_names[idx])
 
         # 数据源类型
-        data_source_type = config.get('data_source_type', 'zip')
+        data_source_type = config.get("data_source_type", "zip")
         self.data_source_var.set(data_source_type)
         self.toggle_data_source()
 
         # 路径
-        self.pre_sql_selector.set_path(config.get('pre_sql_file', ''))
-        self.path_selector.set_path(config.get('data_path', ''))
+        self.pre_sql_selector.set_path(config.get("pre_sql_file", ""))
+        self.path_selector.set_path(config.get("data_path", ""))
 
         # 其他设置
-        self.archive_password_var.set(config.get('archive_password', ''))
-        self.backup_var.set(config.get('need_backup', True))
+        self.archive_password_var.set(config.get("archive_password", ""))
+        self.backup_var.set(config.get("need_backup", True))
 
     def execute_task(self):
         """执行导入任务"""
@@ -270,13 +284,15 @@ class ImportCsvPage(BaseToolPage):
         if pre_sql_file and not os.path.exists(pre_sql_file):
             return {"success": False, "error": f"SQL脚本文件不存在: {pre_sql_file}"}
 
-        if pre_sql_file and not pre_sql_file.lower().endswith(('.sql', '.txt')):
+        if pre_sql_file and not pre_sql_file.lower().endswith((".sql", ".txt")):
             return {"success": False, "error": "只支持.sql和.txt格式的SQL脚本文件"}
 
         if source_type == "folder" and not os.path.isdir(data_path):
             return {"success": False, "error": "请选择有效的目录"}
 
-        if source_type == "zip" and not (os.path.isfile(data_path) and data_path.lower().endswith('.zip')):
+        if source_type == "zip" and not (
+            os.path.isfile(data_path) and data_path.lower().endswith(".zip")
+        ):
             return {"success": False, "error": "请选择有效的.zip压缩包文件"}
 
         # 执行导入
@@ -284,10 +300,10 @@ class ImportCsvPage(BaseToolPage):
             db_config=db_config,
             data_source=data_path,
             source_type=source_type,
-            schema=db_config.get('schema', 'public'),
+            schema=db_config.get("schema", "public"),
             pre_sql_file=pre_sql_file if pre_sql_file else "",
             need_backup=need_backup,
-            archive_password=archive_password if archive_password else None
+            archive_password=archive_password if archive_password else None,
         )
 
 

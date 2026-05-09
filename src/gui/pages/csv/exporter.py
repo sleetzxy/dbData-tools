@@ -1,6 +1,7 @@
 """
 CSV 导出页面 - 使用新的基类和组件架构
 """
+
 import tkinter as tk
 from tkinter import messagebox
 
@@ -69,7 +70,9 @@ class ExportCsvPage(BaseToolPage):
         )
         self.header_checkbox.pack(side="left")
 
-        self.export_button = PrimaryButton(parent, text="🚀 开始导出", command=self.start_task)
+        self.export_button = PrimaryButton(
+            parent, text="🚀 开始导出", command=self.start_task
+        )
         self.export_button.pack(anchor="w", fill="x", pady=(10, 0))
 
     def get_config_dict(self):
@@ -157,7 +160,9 @@ class ExportCsvPage(BaseToolPage):
 
     def collect_task_payload(self):
         selected_name = self.get_selected_connection_name()
-        idx = self.find_connection_index_by_name(selected_name) if selected_name else None
+        idx = (
+            self.find_connection_index_by_name(selected_name) if selected_name else None
+        )
         if idx is None or idx < 0 or idx >= len(self.connections):
             return None, "请选择一个有效的数据库连接"
 

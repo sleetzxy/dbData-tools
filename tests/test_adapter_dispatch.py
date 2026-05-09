@@ -27,7 +27,6 @@ def _make_import_dir():
     return tempfile.mkdtemp(dir=base_dir)
 
 
-
 def test_postgresql_config_dispatches_to_postgresql_adapter():
     config = {
         "name": "pg",
@@ -179,7 +178,6 @@ def test_export_tables_to_csv_dispatches_clickhouse_adapter(monkeypatch):
     assert result["schema"] == ""
 
 
-
 def test_export_database_to_sql_dispatches_postgresql_adapter(monkeypatch):
     called = {}
 
@@ -204,7 +202,9 @@ def test_export_database_to_sql_dispatches_postgresql_adapter(monkeypatch):
         client=object(),
     )
 
-    monkeypatch.setattr("core.exporter_db.create_connection", lambda db_config, logger: handle)
+    monkeypatch.setattr(
+        "core.exporter_db.create_connection", lambda db_config, logger: handle
+    )
     monkeypatch.setattr("core.exporter_db.close_connection", lambda conn, logger: None)
 
     result = export_database_to_sql(
@@ -252,7 +252,9 @@ def test_export_database_to_sql_dispatches_clickhouse_adapter_schema_empty(monke
         client=object(),
     )
 
-    monkeypatch.setattr("core.exporter_db.create_connection", lambda db_config, logger: handle)
+    monkeypatch.setattr(
+        "core.exporter_db.create_connection", lambda db_config, logger: handle
+    )
     monkeypatch.setattr("core.exporter_db.close_connection", lambda conn, logger: None)
 
     result = export_database_to_sql(
@@ -274,6 +276,7 @@ def test_export_database_to_sql_dispatches_clickhouse_adapter_schema_empty(monke
     assert called["schema"] == ""
     assert result["success"] is True
     assert result["schema"] == ""
+
 
 def test_export_tables_to_csv_clickhouse_failure_schema_is_empty(monkeypatch):
     def fake_create_connection(db_config, logger):
@@ -313,7 +316,9 @@ def test_export_tables_to_csv_clickhouse_exception_schema_is_empty(monkeypatch):
         client=object(),
     )
 
-    monkeypatch.setattr("core.exporter_csv.create_connection", lambda db_config, logger: handle)
+    monkeypatch.setattr(
+        "core.exporter_csv.create_connection", lambda db_config, logger: handle
+    )
     monkeypatch.setattr("core.exporter_csv.close_connection", lambda conn, logger: None)
 
     config = {
@@ -369,6 +374,7 @@ def test_export_tables_to_csv_clickhouse_outer_exception_schema_is_empty(monkeyp
     assert result["schema"] == ""
     assert "boom" in result["error"]
 
+
 def test_import_csv_dispatches_postgresql_adapter(monkeypatch):
     called = {}
     import_dir = _make_import_dir()
@@ -402,10 +408,16 @@ def test_import_csv_dispatches_postgresql_adapter(monkeypatch):
         client=object(),
     )
 
-    monkeypatch.setattr("core.importer_csv.create_connection", lambda db_config, logger: handle)
+    monkeypatch.setattr(
+        "core.importer_csv.create_connection", lambda db_config, logger: handle
+    )
     monkeypatch.setattr("core.importer_csv.close_connection", lambda conn, logger: None)
-    monkeypatch.setattr("core.importer_csv.get_data_directory", lambda *args, **kwargs: import_dir)
-    monkeypatch.setattr("core.importer_csv.get_table_names_from_csv", lambda data_dir: ["demo"])
+    monkeypatch.setattr(
+        "core.importer_csv.get_data_directory", lambda *args, **kwargs: import_dir
+    )
+    monkeypatch.setattr(
+        "core.importer_csv.get_table_names_from_csv", lambda data_dir: ["demo"]
+    )
 
     try:
         result = import_csv_to_db(
@@ -423,6 +435,7 @@ def test_import_csv_dispatches_postgresql_adapter(monkeypatch):
         )
     finally:
         import shutil
+
         shutil.rmtree(import_dir, ignore_errors=True)
 
     assert called["adapter"] == "postgresql"
@@ -465,10 +478,16 @@ def test_import_csv_dispatches_clickhouse_adapter_schema_empty(monkeypatch):
         client=object(),
     )
 
-    monkeypatch.setattr("core.importer_csv.create_connection", lambda db_config, logger: handle)
+    monkeypatch.setattr(
+        "core.importer_csv.create_connection", lambda db_config, logger: handle
+    )
     monkeypatch.setattr("core.importer_csv.close_connection", lambda conn, logger: None)
-    monkeypatch.setattr("core.importer_csv.get_data_directory", lambda *args, **kwargs: import_dir)
-    monkeypatch.setattr("core.importer_csv.get_table_names_from_csv", lambda data_dir: ["demo"])
+    monkeypatch.setattr(
+        "core.importer_csv.get_data_directory", lambda *args, **kwargs: import_dir
+    )
+    monkeypatch.setattr(
+        "core.importer_csv.get_table_names_from_csv", lambda data_dir: ["demo"]
+    )
 
     try:
         result = import_csv_to_db(
@@ -486,6 +505,7 @@ def test_import_csv_dispatches_clickhouse_adapter_schema_empty(monkeypatch):
         )
     finally:
         import shutil
+
         shutil.rmtree(import_dir, ignore_errors=True)
 
     assert called["schema"] == ""
@@ -525,10 +545,16 @@ def test_import_csv_result_passes_through_adapter(monkeypatch):
         client=object(),
     )
 
-    monkeypatch.setattr("core.importer_csv.create_connection", lambda db_config, logger: handle)
+    monkeypatch.setattr(
+        "core.importer_csv.create_connection", lambda db_config, logger: handle
+    )
     monkeypatch.setattr("core.importer_csv.close_connection", lambda conn, logger: None)
-    monkeypatch.setattr("core.importer_csv.get_data_directory", lambda *args, **kwargs: import_dir)
-    monkeypatch.setattr("core.importer_csv.get_table_names_from_csv", lambda data_dir: ["demo"])
+    monkeypatch.setattr(
+        "core.importer_csv.get_data_directory", lambda *args, **kwargs: import_dir
+    )
+    monkeypatch.setattr(
+        "core.importer_csv.get_table_names_from_csv", lambda data_dir: ["demo"]
+    )
 
     try:
         result = import_csv_to_db(
@@ -546,6 +572,7 @@ def test_import_csv_result_passes_through_adapter(monkeypatch):
         )
     finally:
         import shutil
+
         shutil.rmtree(import_dir, ignore_errors=True)
 
     assert result["success"] is False
@@ -585,10 +612,16 @@ def test_import_csv_sets_data_directory_and_passes_params(monkeypatch):
         client=object(),
     )
 
-    monkeypatch.setattr("core.importer_csv.create_connection", lambda db_config, logger: handle)
+    monkeypatch.setattr(
+        "core.importer_csv.create_connection", lambda db_config, logger: handle
+    )
     monkeypatch.setattr("core.importer_csv.close_connection", lambda conn, logger: None)
-    monkeypatch.setattr("core.importer_csv.get_data_directory", lambda *args, **kwargs: import_dir)
-    monkeypatch.setattr("core.importer_csv.get_table_names_from_csv", lambda data_dir: ["demo"])
+    monkeypatch.setattr(
+        "core.importer_csv.get_data_directory", lambda *args, **kwargs: import_dir
+    )
+    monkeypatch.setattr(
+        "core.importer_csv.get_table_names_from_csv", lambda data_dir: ["demo"]
+    )
 
     try:
         result = import_csv_to_db(
@@ -608,6 +641,7 @@ def test_import_csv_sets_data_directory_and_passes_params(monkeypatch):
         )
     finally:
         import shutil
+
         shutil.rmtree(import_dir, ignore_errors=True)
 
     assert called["pre_sql_file"] == "pre.sql"
@@ -637,7 +671,10 @@ def test_clickhouse_import_invalid_table_does_not_abort(monkeypatch):
     def fake_open(path, mode="rb"):
         return DummyBinaryFile(b"col1\n2\n")
 
-    monkeypatch.setattr("db.adapters.clickhouse_adapter.generate_copy_commands", fake_generate_copy_commands)
+    monkeypatch.setattr(
+        "db.adapters.clickhouse_adapter.generate_copy_commands",
+        fake_generate_copy_commands,
+    )
     monkeypatch.setattr("builtins.open", fake_open)
 
     class DummyClient:
@@ -646,7 +683,7 @@ def test_clickhouse_import_invalid_table_does_not_abort(monkeypatch):
 
         def command(self, statement, data=None):
             if data is not None and not isinstance(data, (str, bytes)):
-                raise TypeError('data must be str or bytes')
+                raise TypeError("data must be str or bytes")
             self.commands.append(statement)
 
     client = DummyClient()
@@ -672,8 +709,6 @@ def test_clickhouse_import_invalid_table_does_not_abort(monkeypatch):
     assert any(item["table"] == invalid_table for item in result["error_tables"])
     assert valid_table in result["imported_tables"]
     assert result["schema"] == ""
-
-
 
 
 def test_import_csv_postgresql_blank_schema_defaults_public(monkeypatch):
@@ -708,10 +743,16 @@ def test_import_csv_postgresql_blank_schema_defaults_public(monkeypatch):
         client=object(),
     )
 
-    monkeypatch.setattr("core.importer_csv.create_connection", lambda db_config, logger: handle)
+    monkeypatch.setattr(
+        "core.importer_csv.create_connection", lambda db_config, logger: handle
+    )
     monkeypatch.setattr("core.importer_csv.close_connection", lambda conn, logger: None)
-    monkeypatch.setattr("core.importer_csv.get_data_directory", lambda *args, **kwargs: import_dir)
-    monkeypatch.setattr("core.importer_csv.get_table_names_from_csv", lambda data_dir: ["demo"])
+    monkeypatch.setattr(
+        "core.importer_csv.get_data_directory", lambda *args, **kwargs: import_dir
+    )
+    monkeypatch.setattr(
+        "core.importer_csv.get_table_names_from_csv", lambda data_dir: ["demo"]
+    )
 
     try:
         result = import_csv_to_db(
@@ -730,6 +771,7 @@ def test_import_csv_postgresql_blank_schema_defaults_public(monkeypatch):
         )
     finally:
         import shutil
+
         shutil.rmtree(import_dir, ignore_errors=True)
 
     assert called["schema"] == "public"
@@ -858,10 +900,6 @@ def test_postgresql_import_rollback_clears_imported_tables(monkeypatch):
     assert client.rolled_back is True
 
 
-
-
-
-
 def test_postgresql_import_uses_double_quote_escape():
     from db.adapters import postgresql_adapter
 
@@ -881,9 +919,13 @@ def test_read_sql_from_file_accepts_uppercase_extension(monkeypatch):
             return False
 
     monkeypatch.setattr("os.path.exists", lambda path: path == sql_path)
-    monkeypatch.setattr("builtins.open", lambda path, mode="r", encoding=None: DummyTextFile("SELECT 1;"))
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda path, mode="r", encoding=None: DummyTextFile("SELECT 1;"),
+    )
 
     from core.importer_csv import read_sql_from_file
+
     assert read_sql_from_file(sql_path) == "SELECT 1;"
 
 
@@ -940,9 +982,21 @@ def test_clickhouse_export_sql_orders_tables_and_ignores_schema():
             if statement == "SHOW TABLES FROM `default`":
                 return DummyResult([("z_table",), ("skip_me",), ("a_table",)])
             if statement == "SHOW CREATE TABLE `default`.`a_table`":
-                return DummyResult([("CREATE TABLE `default`.`a_table` (`id` UInt32) ENGINE = MergeTree ORDER BY tuple()",)])
+                return DummyResult(
+                    [
+                        (
+                            "CREATE TABLE `default`.`a_table` (`id` UInt32) ENGINE = MergeTree ORDER BY tuple()",
+                        )
+                    ]
+                )
             if statement == "SHOW CREATE TABLE `default`.`z_table`":
-                return DummyResult([("CREATE TABLE `default`.`z_table` (`id` UInt32) ENGINE = MergeTree ORDER BY tuple()",)])
+                return DummyResult(
+                    [
+                        (
+                            "CREATE TABLE `default`.`z_table` (`id` UInt32) ENGINE = MergeTree ORDER BY tuple()",
+                        )
+                    ]
+                )
             if statement == "SELECT * FROM `default`.`a_table`":
                 return DummyResult([(1,)], ["id"])
             if statement == "SELECT * FROM `default`.`z_table`":
@@ -994,7 +1048,6 @@ def test_pyinstaller_spec_includes_clickhouse_hidden_import():
     assert "clickhouse_connect" in spec_source
 
 
-
 def test_clickhouse_import_creates_csv_backup_before_import(monkeypatch):
     adapter = ClickHouseAdapter()
 
@@ -1021,25 +1074,28 @@ def test_clickhouse_import_creates_csv_backup_before_import(monkeypatch):
             self.close()
             return False
 
-    def fake_open(path, mode='r', encoding=None):
+    def fake_open(path, mode="r", encoding=None):
         path_str = str(path)
-        if 'rb' in mode:
-            return DummyBinaryFile(b'id\n2\n')
-        if 'wb' in mode:
+        if "rb" in mode:
+            return DummyBinaryFile(b"id\n2\n")
+        if "wb" in mode:
             return DummyWriteFile(path_str)
-        raise AssertionError(f'unexpected open mode: {mode}')
+        raise AssertionError(f"unexpected open mode: {mode}")
 
-    monkeypatch.setattr('db.adapters.clickhouse_adapter.generate_copy_commands', lambda tables, data_dir: [('demo', 'demo.csv')])
-    monkeypatch.setattr('builtins.open', fake_open)
+    monkeypatch.setattr(
+        "db.adapters.clickhouse_adapter.generate_copy_commands",
+        lambda tables, data_dir: [("demo", "demo.csv")],
+    )
+    monkeypatch.setattr("builtins.open", fake_open)
 
     class DummyClient:
         def __init__(self):
             self.commands = []
 
         def raw_query(self, statement):
-            if statement == 'SELECT * FROM `default`.`demo` FORMAT CSVWithNames':
-                return b'id\n1\n'
-            raise AssertionError(f'unexpected raw_query: {statement}')
+            if statement == "SELECT * FROM `default`.`demo` FORMAT CSVWithNames":
+                return b"id\n1\n"
+            raise AssertionError(f"unexpected raw_query: {statement}")
 
         def command(self, statement, data=None):
             self.commands.append((statement, data))
@@ -1049,38 +1105,41 @@ def test_clickhouse_import_creates_csv_backup_before_import(monkeypatch):
     result = adapter.import_csv(
         client=client,
         db_config={
-            'name': 'ch',
-            'db_type': 'clickhouse',
-            'host': '127.0.0.1',
-            'database': 'default',
-            'user': 'default',
-            'password': '',
+            "name": "ch",
+            "db_type": "clickhouse",
+            "host": "127.0.0.1",
+            "database": "default",
+            "user": "default",
+            "password": "",
         },
-        table_names=['demo'],
-        data_dir='data_dir',
-        schema='',
-        pre_sql_file='',
+        table_names=["demo"],
+        data_dir="data_dir",
+        schema="",
+        pre_sql_file="",
         need_backup=True,
         logger=None,
     )
 
-    assert result['success'] is True
-    assert result['backup_path']
-    assert any(path.endswith('demo.csv') for path in written)
-    assert any(data == b'id\n2\n' for _, data in client.commands if data is not None)
+    assert result["success"] is True
+    assert result["backup_path"]
+    assert any(path.endswith("demo.csv") for path in written)
+    assert any(data == b"id\n2\n" for _, data in client.commands if data is not None)
 
 
 def test_clickhouse_import_backup_failure_stops_import(monkeypatch):
     adapter = ClickHouseAdapter()
 
-    monkeypatch.setattr('db.adapters.clickhouse_adapter.generate_copy_commands', lambda tables, data_dir: [('demo', 'demo.csv')])
+    monkeypatch.setattr(
+        "db.adapters.clickhouse_adapter.generate_copy_commands",
+        lambda tables, data_dir: [("demo", "demo.csv")],
+    )
 
     class DummyClient:
         def __init__(self):
             self.commands = []
 
         def raw_query(self, statement):
-            raise RuntimeError('backup failed')
+            raise RuntimeError("backup failed")
 
         def command(self, statement, data=None):
             self.commands.append((statement, data))
@@ -1088,31 +1147,36 @@ def test_clickhouse_import_backup_failure_stops_import(monkeypatch):
     result = adapter.import_csv(
         client=DummyClient(),
         db_config={
-            'name': 'ch',
-            'db_type': 'clickhouse',
-            'host': '127.0.0.1',
-            'database': 'default',
-            'user': 'default',
-            'password': '',
+            "name": "ch",
+            "db_type": "clickhouse",
+            "host": "127.0.0.1",
+            "database": "default",
+            "user": "default",
+            "password": "",
         },
-        table_names=['demo'],
-        data_dir='data_dir',
-        schema='',
-        pre_sql_file='',
+        table_names=["demo"],
+        data_dir="data_dir",
+        schema="",
+        pre_sql_file="",
         need_backup=True,
         logger=None,
     )
 
-    assert result['success'] is False
-    assert result['backup_path'] is None
-    assert result['error'] == ''.join(chr(x) for x in [23548, 20837, 21069, 22791, 20221, 22833, 36133]) + ': backup failed'
-    assert result['error_tables'] == []
-    assert result['imported_tables'] == []
+    assert result["success"] is False
+    assert result["backup_path"] is None
+    assert (
+        result["error"]
+        == "".join(chr(x) for x in [23548, 20837, 21069, 22791, 20221, 22833, 36133])
+        + ": backup failed"
+    )
+    assert result["error_tables"] == []
+    assert result["imported_tables"] == []
 
 
 def test_postgresql_import_csv_truncate_before_false_skips_truncate():
     """truncate_before=False 时不应执行 TRUNCATE，验证参数被接受不报错"""
     from db.adapters.postgresql_adapter import PostgreSQLAdapter
+
     adapter = PostgreSQLAdapter()
 
     truncated = []
@@ -1122,19 +1186,32 @@ def test_postgresql_import_csv_truncate_before_false_skips_truncate():
             sql_str = str(sql_obj)
             if "TRUNCATE" in sql_str.upper():
                 truncated.append(sql_str)
-        def copy_expert(self, sql_str, f): pass
-        def __enter__(self): return self
-        def __exit__(self, *a): pass
+
+        def copy_expert(self, sql_str, f):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
 
     class FakeConn:
         def __init__(self):
             self.autocommit = False
             self._cursor = FakeCursor()
-        def cursor(self): return self._cursor
-        def commit(self): pass
-        def rollback(self): pass
+
+        def cursor(self):
+            return self._cursor
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
 
     import tempfile, os, shutil
+
     tmp = tempfile.mkdtemp()
     try:
         csv_file = os.path.join(tmp, "t1.csv")
@@ -1150,7 +1227,9 @@ def test_postgresql_import_csv_truncate_before_false_skips_truncate():
             truncate_before=False,
             logger=None,
         )
-        assert truncated == [], f"TRUNCATE should not have been called but got: {truncated}"
+        assert truncated == [], (
+            f"TRUNCATE should not have been called but got: {truncated}"
+        )
     finally:
         shutil.rmtree(tmp)
 
@@ -1158,6 +1237,7 @@ def test_postgresql_import_csv_truncate_before_false_skips_truncate():
 def test_clickhouse_import_csv_truncate_before_false_skips_truncate():
     """ClickHouse truncate_before=False 时不执行 TRUNCATE"""
     from db.adapters.clickhouse_adapter import ClickHouseAdapter
+
     adapter = ClickHouseAdapter()
 
     commands_called = []
@@ -1167,6 +1247,7 @@ def test_clickhouse_import_csv_truncate_before_false_skips_truncate():
             commands_called.append(sql)
 
     import tempfile, os, shutil
+
     tmp = tempfile.mkdtemp()
     try:
         csv_file = os.path.join(tmp, "t1.csv")
@@ -1182,6 +1263,8 @@ def test_clickhouse_import_csv_truncate_before_false_skips_truncate():
             logger=None,
         )
         truncate_commands = [c for c in commands_called if "TRUNCATE" in c.upper()]
-        assert truncate_commands == [], f"TRUNCATE should not have been called but got: {truncate_commands}"
+        assert truncate_commands == [], (
+            f"TRUNCATE should not have been called but got: {truncate_commands}"
+        )
     finally:
         shutil.rmtree(tmp)

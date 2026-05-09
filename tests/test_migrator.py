@@ -14,12 +14,27 @@ def _make_mock_adapter(rows_per_table=3, fail_tables=None):
     class MockAdapter:
         db_type = "mock"
 
-        def export_csv(self, client, db_config, tables, export_dir,
-                       schema="", include_header=True, logger=None):
-            result = {"success": True, "exported_tables": [], "error_tables": [], "total_rows": 0}
+        def export_csv(
+            self,
+            client,
+            db_config,
+            tables,
+            export_dir,
+            schema="",
+            include_header=True,
+            logger=None,
+        ):
+            result = {
+                "success": True,
+                "exported_tables": [],
+                "error_tables": [],
+                "total_rows": 0,
+            }
             for table in tables:
                 if table in fail_tables:
-                    result["error_tables"].append({"name": table, "error": "mock export error"})
+                    result["error_tables"].append(
+                        {"name": table, "error": "mock export error"}
+                    )
                     result["success"] = False
                     continue
                 filepath = os.path.join(export_dir, f"{table}.csv")
@@ -28,30 +43,47 @@ def _make_mock_adapter(rows_per_table=3, fail_tables=None):
                     writer.writerow(["id", "val"])
                     for i in range(rows_per_table):
                         writer.writerow([i, f"v{i}"])
-                result["exported_tables"].append({"name": table, "rows": rows_per_table})
+                result["exported_tables"].append(
+                    {"name": table, "rows": rows_per_table}
+                )
                 result["total_rows"] += rows_per_table
             return result
 
-        def import_csv(self, client, db_config, table_names, data_dir,
-                       schema="", pre_sql_file="", need_backup=False,
-                       truncate_before=True, logger=None):
+        def import_csv(
+            self,
+            client,
+            db_config,
+            table_names,
+            data_dir,
+            schema="",
+            pre_sql_file="",
+            need_backup=False,
+            truncate_before=True,
+            logger=None,
+        ):
             result = {"success": True, "imported_tables": [], "error_tables": []}
             for table in table_names:
                 if table in fail_tables:
-                    result["error_tables"].append({"table": table, "error": "mock import error"})
+                    result["error_tables"].append(
+                        {"table": table, "error": "mock import error"}
+                    )
                     result["success"] = False
                     continue
                 result["imported_tables"].append(table)
             return result
 
-        def create_client(self, db_config): return object()
-        def close_client(self, client): pass
+        def create_client(self, db_config):
+            return object()
+
+        def close_client(self, client):
+            pass
 
     return MockAdapter()
 
 
 def test_migrate_tables_success():
     from core.migrator import migrate_tables
+
     adapter = _make_mock_adapter(rows_per_table=5)
     src_config = {"db_type": "mock", "database": "src"}
     dst_config = {"db_type": "mock", "database": "dst"}
@@ -73,6 +105,7 @@ def test_migrate_tables_success():
 
 def test_migrate_tables_empty_list():
     from core.migrator import migrate_tables
+
     adapter = _make_mock_adapter()
     result = migrate_tables(
         src_config={"db_type": "mock", "database": "src"},
@@ -88,6 +121,7 @@ def test_migrate_tables_empty_list():
 
 def test_migrate_tables_partial_failure():
     from core.migrator import migrate_tables
+
     adapter = _make_mock_adapter(fail_tables=["bad_table"])
     result = migrate_tables(
         src_config={"db_type": "mock", "database": "src"},
@@ -112,25 +146,56 @@ def test_migrate_tables_truncate_before_false_passes_param():
     class TrackingAdapter:
         db_type = "mock"
 
-        def export_csv(self, client, db_config, tables, export_dir,
-                       schema="", include_header=True, logger=None):
+        def export_csv(
+            self,
+            client,
+            db_config,
+            tables,
+            export_dir,
+            schema="",
+            include_header=True,
+            logger=None,
+        ):
             for table in tables:
-                with open(os.path.join(export_dir, f"{table}.csv"), "w", encoding="utf-8") as f:
+                with open(
+                    os.path.join(export_dir, f"{table}.csv"), "w", encoding="utf-8"
+                ) as f:
                     f.write("id\n1\n")
-            return {"success": True, "exported_tables": [{"name": t, "rows": 1} for t in tables],
-                    "error_tables": [], "total_rows": len(tables)}
+            return {
+                "success": True,
+                "exported_tables": [{"name": t, "rows": 1} for t in tables],
+                "error_tables": [],
+                "total_rows": len(tables),
+            }
 
-        def import_csv(self, client, db_config, table_names, data_dir,
-                       schema="", pre_sql_file="", need_backup=False,
-                       truncate_before=True, logger=None):
+        def import_csv(
+            self,
+            client,
+            db_config,
+            table_names,
+            data_dir,
+            schema="",
+            pre_sql_file="",
+            need_backup=False,
+            truncate_before=True,
+            logger=None,
+        ):
             truncate_calls.append(truncate_before)
-            return {"success": True, "imported_tables": list(table_names), "error_tables": []}
+            return {
+                "success": True,
+                "imported_tables": list(table_names),
+                "error_tables": [],
+            }
 
-        def create_client(self, db_config): return object()
-        def close_client(self, client): pass
+        def create_client(self, db_config):
+            return object()
+
+        def close_client(self, client):
+            pass
 
     ta = TrackingAdapter()
     from core.migrator import migrate_tables
+
     migrate_tables(
         src_config={"db_type": "mock", "database": "src"},
         dst_config={"db_type": "mock", "database": "dst"},
