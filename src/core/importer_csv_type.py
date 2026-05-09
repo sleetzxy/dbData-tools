@@ -1,8 +1,8 @@
 import os
-from typing import List, Dict, Any, Optional
 from datetime import datetime
+from typing import Any
 
-from db.connection import create_connection, close_connection
+from db.connection import close_connection, create_connection
 from utils.logger_factory import get_logger
 
 LOGGER_NAME = "importer_incremental"
@@ -12,7 +12,7 @@ logger = get_logger(LOGGER_NAME)
 def get_data_directory(
     data_source: str,
     source_type: str = "folder",
-    archive_password: Optional[str] = None,
+    archive_password: str | None = None,
 ) -> str:
     """
     获取数据目录路径，仅支持文件夹数据源
@@ -22,7 +22,7 @@ def get_data_directory(
     return data_source
 
 
-def get_table_names_from_csv(data_dir: str) -> List[str]:
+def get_table_names_from_csv(data_dir: str) -> list[str]:
     try:
         return [
             os.path.splitext(f)[0] for f in os.listdir(data_dir) if f.endswith(".csv")
@@ -38,7 +38,7 @@ def get_table_names_from_csv(data_dir: str) -> List[str]:
                     encoded_f = f.encode("latin-1").decode("gbk")
                     if encoded_f.endswith(".csv"):
                         tables.append(os.path.splitext(encoded_f)[0])
-                except:
+                except (UnicodeDecodeError, UnicodeError, ValueError):
                     continue
         return tables
 
@@ -48,7 +48,7 @@ def get_table_counts_for_specific_types(
     schema: str,
     table: str,
     type_col: str,
-    values: List[Any],
+    values: list[Any],
     datatype: str = "string",
 ) -> int:
     """
@@ -65,7 +65,10 @@ def get_table_counts_for_specific_types(
                     formatted_values.append(str(value))
 
             values_list = ",".join(formatted_values)
-            count_sql = f'SELECT COUNT(1) FROM "{schema}"."{table}" WHERE "{type_col}" IN ({values_list})'
+            count_sql = (
+                f'SELECT COUNT(1) FROM "{schema}"."{table}" '
+                f'WHERE "{type_col}" IN ({values_list})'
+            )
 
             logger.debug(f"统计SQL: {count_sql}")
             cursor.execute(count_sql)
@@ -76,7 +79,7 @@ def get_table_counts_for_specific_types(
         return 0
 
 
-def format_values_for_sql(values: List[Any], datatype: str = "string") -> List[str]:
+def format_values_for_sql(values: list[Any], datatype: str = "string") -> list[str]:
     """
     根据数据类型格式化值用于SQL语句
     """
@@ -93,7 +96,7 @@ def format_values_for_sql(values: List[Any], datatype: str = "string") -> List[s
 
 
 def generate_delete_sql(
-    schema: str, table: str, type_col: str, values: List[Any], datatype: str = "string"
+    schema: str, table: str, type_col: str, values: list[Any], datatype: str = "string"
 ) -> str:
     """
     生成DELETE SQL语句，根据数据类型正确处理值
@@ -106,7 +109,7 @@ def generate_delete_sql(
     return delete_sql
 
 
-def backup_tables(conn, schema: str, table_names: List[str], backup_dir: str) -> str:
+def backup_tables(conn, schema: str, table_names: list[str], backup_dir: str) -> str:
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     backup_path = os.path.join(backup_dir, timestamp)
     os.makedirs(backup_path, exist_ok=True)
@@ -116,10 +119,13 @@ def backup_tables(conn, schema: str, table_names: List[str], backup_dir: str) ->
             backup_file = os.path.join(backup_path, f"{table}.csv")
             try:
                 with open(backup_file, "w", encoding="utf-8") as f:
-                    cursor.copy_expert(
-                        f"COPY (SELECT * FROM \"{schema}\".\"{table}\") TO STDOUT WITH (FORMAT CSV, HEADER true, DELIMITER ',', ENCODING 'UTF8')",
-                        f,
+                    copy_sql = (
+                        f'COPY (SELECT * FROM "{schema}"."{table}") '
+                        "TO STDOUT WITH ("
+                        "FORMAT CSV, HEADER true, DELIMITER ',', ENCODING 'UTF8'"
+                        ")"
                     )
+                    cursor.copy_expert(copy_sql, f)
                 logger.info(f"表 {table} 备份成功 -> {backup_file}")
             except Exception as e:
                 logger.error(f"表 {table} 备份失败: {e}")
@@ -127,11 +133,11 @@ def backup_tables(conn, schema: str, table_names: List[str], backup_dir: str) ->
 
 
 def generate_copy_commands(
-    table_names: List[str], data_dir: str
-) -> List[tuple[str, str]]:
-    copy_commands: List[tuple[str, str]] = []
+    table_names: list[str], data_dir: str
+) -> list[tuple[str, str]]:
+    copy_commands: list[tuple[str, str]] = []
     for table in table_names:
-        candidates: List[tuple[str, str]] = []
+        candidates: list[tuple[str, str]] = []
         path = os.path.join(data_dir, f"{table}.csv")
         if os.path.exists(path):
             candidates.append((table, path))
@@ -141,14 +147,14 @@ def generate_copy_commands(
                 path_gbk = os.path.join(data_dir, f"{encoded_table}.csv")
                 if os.path.exists(path_gbk):
                     candidates.append((table, path_gbk))
-            except:
+            except (UnicodeDecodeError, UnicodeError, ValueError):
                 pass
             try:
                 encoded_table = table.encode("utf-8").decode("latin-1")
                 path_utf8 = os.path.join(data_dir, f"{encoded_table}.csv")
                 if os.path.exists(path_utf8):
                     candidates.append((table, path_utf8))
-            except:
+            except (UnicodeDecodeError, UnicodeError, ValueError):
                 pass
         if not candidates:
             logger.warning(f"CSV文件不存在，跳过该表: {table}")
@@ -158,77 +164,20 @@ def generate_copy_commands(
         logger.error("没有可执行的COPY命令，请检查数据文件是否存在")
     return copy_commands
 
-    """
-    保存指定类型数据的变化统计到Excel
-    """
-    data = []
-    for table, before_count in before_counts.items():
-        after_count = after_counts.get(table, 0)
-        diff = after_count - before_count
-        if diff > 0:
-            diff_str = f"增加了 {diff} 条数据"
-        elif diff < 0:
-            diff_str = f"减少了 {-diff} 条数据"
-        else:
-            diff_str = "无变化"
-        data.append(
-            {
-                "表名": table,
-                "导入前数据量": before_count,
-                "导入后数据量": after_count,
-                "差异": diff_str,
-            }
-        )
-
-    df = pd.DataFrame(data)
-    df.sort_values("表名", inplace=True)
-    excel_file = os.path.join(output_path, "导入后统计结果.xlsx")
-    df.to_excel(excel_file, index=False)
-
-    # 格式化Excel
-    wb = load_workbook(excel_file)
-    ws = wb.active
-
-    # 设置单元格样式
-    for row in ws.iter_rows(
-        min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column
-    ):
-        for cell in row:
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.border = Border(
-                left=Side(border_style="thin"),
-                right=Side(border_style="thin"),
-                top=Side(border_style="thin"),
-                bottom=Side(border_style="thin"),
-            )
-
-    # 调整列宽
-    for col in ws.columns:
-        max_len = 0
-        col_letter = col[0].column_letter
-        for cell in col:
-            try:
-                max_len = max(max_len, len(str(cell.value)))
-            except:
-                pass
-        ws.column_dimensions[col_letter].width = max_len + 4
-
-    wb.save(excel_file)
-    logger.info(f"导入结果已保存至: {excel_file}")
-
 
 def import_csv_incremental_segmented_to_db(
-    db_config: Dict[str, Any],
+    db_config: dict[str, Any],
     data_source: str,
-    type_column_map: Dict[str, Dict[str, Any]],
+    type_column_map: dict[str, dict[str, Any]],
     source_type: str = "folder",
     schema: str = "public",
     need_backup: bool = False,
-    archive_password: Optional[str] = None,
-) -> Dict[str, Any]:
+    archive_password: str | None = None,
+) -> dict[str, Any]:
     """
-    导入CSV数据：根据GUI输入的表名、列名、列类型和列值先删除数据，然后使用COPY命令导入。
-    本函数完全独立，不引用 importer_csv.py 的任何方法，且仅支持文件夹数据源（不处理ZIP）。
+    导入CSV数据：根据GUI输入的表名、列名、列类型和列值先删除数据，然后使用COPY导入。
+
+    本函数完全独立，不引用 importer_csv.py；仅支持文件夹数据源（不处理 ZIP）。
     """
     result = {
         "success": True,
@@ -267,7 +216,11 @@ def import_csv_incremental_segmented_to_db(
             if not config or not type_col or not datatype or not values:
                 invalid_tables.append(table)
         if invalid_tables:
-            error_msg = f"以下表缺少类型列/类型值数据类型或类型值配置，禁止导入: {', '.join(invalid_tables)}"
+            joined = ", ".join(invalid_tables)
+            error_msg = (
+                "以下表缺少类型列/类型值数据类型或类型值配置，禁止导入: "
+                f"{joined}"
+            )
             logger.error(error_msg)
             result["success"] = False
             result["error"] = error_msg
@@ -340,7 +293,11 @@ def import_csv_incremental_segmented_to_db(
                     return result
 
                 logger.info(
-                    f"开始处理表 {schema}.{table}，类型列: {type_col}，数据类型: {datatype}"
+                    "开始处理表 %s.%s，类型列: %s，数据类型: %s",
+                    schema,
+                    table,
+                    type_col,
+                    datatype,
                 )
 
                 # 先删除指定列的指定值（单次IN删除）
@@ -357,11 +314,17 @@ def import_csv_incremental_segmented_to_db(
                     deleted_count = cursor.rowcount
                     logger.info(f"表 {schema}.{table} 删除 {deleted_count} 条记录")
 
-                # logger.info(f"表 {schema}.{table} 已删除类型列 {type_col} 的 {len(values)} 个值对应的记录")
+                # logger.info(
+                #     "表 %s.%s 已删除类型列 %s 的 %s 个值对应的记录",
+                #     schema,
+                #     table,
+                #     type_col,
+                #     len(values),
+                # )
                 # COPY导入（指定列名）
                 logger.info(f"开始导入表 {schema}.{table} 从文件 {csv_file}")
                 with conn.cursor() as cursor:
-                    with open(csv_file, "r", encoding="utf-8") as f:
+                    with open(csv_file, encoding="utf-8") as f:
                         header_line = f.readline().strip()
                         if not header_line:
                             raise ValueError(f"CSV文件缺少表头: {csv_file}")
@@ -377,7 +340,7 @@ def import_csv_incremental_segmented_to_db(
                                 HEADER true,
                                 ENCODING 'UTF8',
                                 QUOTE '"',
-                                ESCAPE '''' 
+                                ESCAPE ''''
                             )
                         """
                         cursor.copy_expert(copy_sql, f)

@@ -1,7 +1,7 @@
-import os
 import csv
-from typing import Dict, Tuple, Any
-from db.connection import create_connection, close_connection
+import os
+from typing import Any
+
 from utils.logger_factory import get_logger
 
 LOGGER_NAME = "updater"
@@ -10,7 +10,7 @@ logger = get_logger(LOGGER_NAME)
 
 def load_mapping(
     mapping_file: str, mode: str = "encrypt"
-) -> Tuple[Dict[str, str], Dict[str, Dict[str, str]]]:
+) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
     """
     加载映射关系（表名和列名）
 
@@ -27,7 +27,7 @@ def load_mapping(
     total_mappings = 0
 
     try:
-        with open(mapping_file, mode="r", encoding="utf-8") as f:
+        with open(mapping_file, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 # 根据模式决定映射方向
@@ -54,7 +54,9 @@ def load_mapping(
                 total_mappings += 1
 
         logger.info(
-            f"映射文件加载完成，共加载 {len(table_mapping)} 个表映射和 {total_mappings} 个列映射"
+            "映射文件加载完成，共加载 %s 个表映射和 %s 个列映射",
+            len(table_mapping),
+            total_mappings,
         )
         return table_mapping, column_mapping
 
@@ -65,10 +67,10 @@ def load_mapping(
 
 def process_csv_files(
     input_folder: str,
-    table_mapping: Dict[str, str],
-    column_mapping: Dict[str, Dict[str, str]],
+    table_mapping: dict[str, str],
+    column_mapping: dict[str, dict[str, str]],
     mode: str = "encrypt",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     处理CSV文件
 
@@ -97,7 +99,10 @@ def process_csv_files(
     result["output_folder"] = output_folder
 
     logger.info(
-        f"开始处理CSV文件，模式: {mode}, 输入文件夹: {input_folder}, 输出文件夹: {output_folder}"
+        "开始处理CSV文件，模式: %s, 输入文件夹: %s, 输出文件夹: %s",
+        mode,
+        input_folder,
+        output_folder,
     )
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -120,7 +125,7 @@ def process_csv_files(
 
             try:
                 with (
-                    open(input_path, mode="r", encoding="utf-8") as infile,
+                    open(input_path, encoding="utf-8") as infile,
                     open(
                         output_path, mode="w", encoding="utf-8", newline=""
                     ) as outfile,
@@ -136,7 +141,9 @@ def process_csv_files(
                         # 根据 header_line 是否含引号判断是否加引号
                         final_header_line = ",".join(
                             f'"{new}"' if f'"{old}"' in header_line else new
-                            for new, old in zip(new_headers, raw_headers)
+                            for new, old in zip(
+                                new_headers, raw_headers, strict=True
+                            )
                         )
                         outfile.write(final_header_line + "\n")
 
@@ -146,7 +153,10 @@ def process_csv_files(
                         ]
                         if unmapped_columns:
                             logger.warning(
-                                f"表 {original_table_name} 中有 {len(unmapped_columns)} 个列未映射: {unmapped_columns}"
+                                "表 %s 中有 %s 个列未映射: %s",
+                                original_table_name,
+                                len(unmapped_columns),
+                                unmapped_columns,
                             )
                     else:
                         # 没有列名映射，直接保留原始表头
@@ -162,7 +172,10 @@ def process_csv_files(
                         row_count += 1
 
                 logger.info(
-                    f"文件处理成功: {filename} -> {new_table_name}.csv, 共处理 {row_count} 行"
+                    "文件处理成功: %s -> %s.csv, 共处理 %s 行",
+                    filename,
+                    new_table_name,
+                    row_count,
                 )
                 result["processed_files"].append(
                     {
@@ -185,7 +198,9 @@ def process_csv_files(
 
                 shutil.copy2(input_path, output_path)
                 logger.info(
-                    f"表 {original_table_name} 没有映射，已原样复制到输出目录: {filename}"
+                    "表 %s 没有映射，已原样复制到输出目录: %s",
+                    original_table_name,
+                    filename,
                 )
                 result["copied_files"].append(
                     {

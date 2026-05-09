@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 
 from db.connection import close_connection, create_connection, get_db_type
 from utils.logger_factory import get_logger
@@ -8,12 +8,12 @@ logger = get_logger(LOGGER_NAME)
 
 
 def export_tables_to_csv(
-    db_config: Dict[str, Any],
-    tables: List[str],
+    db_config: dict[str, Any],
+    tables: list[str],
     export_dir: str,
     schema: str = "public",
     include_header: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     使用适配器导出指定表为 CSV 文件
 

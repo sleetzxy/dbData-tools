@@ -1,17 +1,17 @@
 import os
 import zipfile
-from typing import List, Dict, Any, Tuple, Optional
+from typing import Any
 
 import pyzipper
 
-from db.connection import create_connection, close_connection
+from db.connection import close_connection, create_connection
 from utils.logger_factory import get_logger
 
 LOGGER_NAME = "importer"
 logger = get_logger(LOGGER_NAME)
 
 
-def extract_zip_file_unified(zip_path: str, password: Optional[str] = None) -> str:
+def extract_zip_file_unified(zip_path: str, password: str | None = None) -> str:
     """解压 ZIP 文件，同时兼容 AES 加密与常见文件名编码问题。"""
     if not os.path.isfile(zip_path):
         raise FileNotFoundError(f"ZIP 文件不存在: {zip_path}")
@@ -81,7 +81,9 @@ def extract_zip_file_unified(zip_path: str, password: Optional[str] = None) -> s
                         dst.write(src.read())
                 except RuntimeError as exc:
                     if "password" in str(exc).lower():
-                        raise ValueError("ZIP 压缩包密码错误或未提供密码")
+                        raise ValueError(
+                            "ZIP 压缩包密码错误或未提供密码"
+                        ) from exc
                     raise
                 except Exception as exc:
                     logger.warning(f"解压文件失败 {decoded_path}: {exc}")
@@ -89,16 +91,16 @@ def extract_zip_file_unified(zip_path: str, password: Optional[str] = None) -> s
 
         logger.info(f"ZIP 解压完成: {zip_path} -> {extract_dir}")
         return extract_dir
-    except zipfile.BadZipFile:
-        raise ValueError(f"无效的 ZIP 文件: {zip_path}")
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"无效的 ZIP 文件: {zip_path}") from exc
     except Exception as exc:
-        raise Exception(f"解压 ZIP 文件失败: {exc}")
+        raise RuntimeError(f"解压 ZIP 文件失败: {exc}") from exc
 
 
 def get_data_directory(
     data_source: str,
     source_type: str = "folder",
-    archive_password: Optional[str] = None,
+    archive_password: str | None = None,
 ) -> str:
     """根据数据源类型返回可用的数据目录。"""
     if source_type == "folder":
@@ -110,7 +112,7 @@ def get_data_directory(
     raise ValueError(f"不支持的数据来源类型: {source_type}")
 
 
-def get_table_names_from_csv(data_dir: str) -> List[str]:
+def get_table_names_from_csv(data_dir: str) -> list[str]:
     """从目录中的 CSV 文件名提取表名。"""
     try:
         table_names = []
@@ -139,8 +141,8 @@ def get_table_names_from_csv(data_dir: str) -> List[str]:
 
 
 def generate_copy_commands(
-    table_names: List[str], data_dir: str
-) -> List[Tuple[str, str]]:
+    table_names: list[str], data_dir: str
+) -> list[tuple[str, str]]:
     """生成 (表名, CSV 路径) 列表。"""
     copy_commands = []
     for table in table_names:
@@ -183,7 +185,7 @@ def read_sql_from_file(file_path: str) -> str:
         raise FileNotFoundError(f"SQL 文件不存在: {file_path}")
     if not file_path.lower().endswith((".txt", ".sql")):
         raise ValueError(f"SQL 文件格式不支持: {file_path}，仅支持 txt 或 sql")
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         return f.read()
 
 
@@ -200,14 +202,14 @@ def _normalize_schema(db_type: str, schema: str) -> str:
 
 
 def import_csv_to_db(
-    db_config: Dict[str, Any],
+    db_config: dict[str, Any],
     data_source: str,
     source_type: str = "folder",
     schema: str = "public",
     pre_sql_file: str = "",
     need_backup: bool = False,
-    archive_password: Optional[str] = None,
-) -> Dict[str, Any]:
+    archive_password: str | None = None,
+) -> dict[str, Any]:
     """将 CSV 数据导入数据库，支持目录或 ZIP 数据源。"""
     effective_schema = _normalize_schema(db_config.get("db_type"), schema)
     result = {

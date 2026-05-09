@@ -11,7 +11,8 @@ import logging
 import os
 import shutil
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from utils.logger_factory import get_logger
 
 LOGGER_NAME = "migrate"
@@ -19,14 +20,14 @@ logger = get_logger(LOGGER_NAME)
 
 
 def migrate_tables(
-    src_config: Dict[str, Any],
-    dst_config: Dict[str, Any],
-    table_names: List[str],
+    src_config: dict[str, Any],
+    dst_config: dict[str, Any],
+    table_names: list[str],
     truncate_before: bool = True,
-    src_adapter: Optional[Any] = None,
-    dst_adapter: Optional[Any] = None,
-    logger: Optional[Any] = None,
-) -> Dict[str, Any]:
+    src_adapter: Any | None = None,
+    dst_adapter: Any | None = None,
+    logger: Any | None = None,
+) -> dict[str, Any]:
     """
     将源库中指定的多张表迁移到目标库。
 
@@ -49,7 +50,7 @@ def migrate_tables(
     """
     _log = logger or logging.getLogger(__name__)
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "success": True,
         "migrated_tables": [],
         "error_tables": [],
