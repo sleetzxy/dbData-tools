@@ -20,6 +20,7 @@ dependencies = [
 dev = [
   "pytest==9.0.2",
   "pytest-mock>=3.12",
+  "ruff>=0.9,<1",
 ]
 
 [tool.setuptools.packages.find]
@@ -29,6 +30,7 @@ include = ["core*", "db*", "gui*", "utils*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+pythonpath = ["src"]
 
 # Pyright / Pylance（IDE 静态分析）：让 IDE 知道业务包在 src/ 下，
 # 即便没有 pip install -e . 也能正确解析 from core.../from gui... 等导入。
@@ -37,3 +39,14 @@ include = ["src", "tests", "main_gui.py"]
 extraPaths = ["src"]
 venvPath = "."
 venv = ".venv"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+extend-exclude = ["build", "dist", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
