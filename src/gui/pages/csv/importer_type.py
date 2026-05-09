@@ -2,16 +2,16 @@
 重构后的 CSV 指定类型导入页面 - 使用新的基类和组件架构
 """
 
-import tkinter as tk
 import os
+import tkinter as tk
 from tkinter import messagebox
 
+from core.importer_csv_type import logger as core_logger
 from gui.base import BaseToolPage
 from gui.components import ConnectionSelector, PathSelector
-from gui.widgets.labels import TitleLabel, StyledLabel
 from gui.widgets.buttons import PrimaryButton
 from gui.widgets.entries import StyledEntry
-from core.importer_csv_type import logger as core_logger
+from gui.widgets.labels import TitleLabel
 
 
 class ImportCsvTypePage(BaseToolPage):
@@ -226,7 +226,7 @@ class ImportCsvTypePage(BaseToolPage):
         try:
             # 读取首行表头
             columns = []
-            with open(csv_path, "r", encoding="utf-8") as f:
+            with open(csv_path, encoding="utf-8") as f:
                 header_line = f.readline().strip()
                 columns = [c.strip() for c in header_line.split(",") if c.strip()]
 
@@ -348,7 +348,10 @@ class ImportCsvTypePage(BaseToolPage):
                 idx = self.find_connection_index_by_name(selected_name)
                 if idx is not None and idx >= 0:
                     connection_names = [
-                        f"{c.get('name', '未命名连接')} ({c.get('host', '')}:{c.get('port', '')})"
+                        (
+                            f"{c.get('name', '未命名连接')} "
+                            f"({c.get('host', '')}:{c.get('port', '')})"
+                        )
                         for c in self.connections
                     ]
                     if idx < len(connection_names):

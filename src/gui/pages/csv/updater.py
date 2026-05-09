@@ -2,15 +2,16 @@
 重构后的 CSV 加解密页面 - 使用新的基类和组件架构
 """
 
-import tkinter as tk
 import os
+import tkinter as tk
 from tkinter import messagebox
 
+from core.updater_csv import load_mapping, process_csv_files
+from core.updater_csv import logger as core_logger
 from gui.base import BaseToolPage
 from gui.components import PathSelector
-from gui.widgets.labels import TitleLabel, StyledLabel
 from gui.widgets.buttons import PrimaryButton
-from core.updater_csv import load_mapping, process_csv_files, logger as core_logger
+from gui.widgets.labels import StyledLabel, TitleLabel
 
 
 class UpdateCsvPage(BaseToolPage):

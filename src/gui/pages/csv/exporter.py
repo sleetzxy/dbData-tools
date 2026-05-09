@@ -5,12 +5,13 @@ CSV 导出页面 - 使用新的基类和组件架构
 import tkinter as tk
 from tkinter import messagebox
 
+from core.exporter_csv import export_tables_to_csv
+from core.exporter_csv import logger as core_logger
 from gui.base import BaseToolPage
 from gui.components import ConnectionSelector, PathSelector
-from gui.widgets.labels import TitleLabel, StyledLabel
 from gui.widgets.buttons import PrimaryButton
+from gui.widgets.labels import StyledLabel, TitleLabel
 from gui.widgets.scrolled_texts import StyledScrolledText
-from core.exporter_csv import export_tables_to_csv, logger as core_logger
 
 
 class ExportCsvPage(BaseToolPage):
@@ -91,7 +92,10 @@ class ExportCsvPage(BaseToolPage):
                 idx = self.find_connection_index_by_name(selected_name)
                 if idx is not None and idx >= 0:
                     connection_names = [
-                        f"{c.get('name', '未命名连接')} ({c.get('host', '')}:{c.get('port', '')})"
+                        (
+                            f"{c.get('name', '未命名连接')} "
+                            f"({c.get('host', '')}:{c.get('port', '')})"
+                        )
                         for c in self.connections
                     ]
                     if idx < len(connection_names):

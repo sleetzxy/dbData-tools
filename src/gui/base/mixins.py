@@ -2,10 +2,10 @@
 混入类模块 - 提供可复用的功能混入
 """
 
-import tkinter as tk
 import json
+import tkinter as tk
 from pathlib import Path
-from typing import Optional, List, Dict
+
 from gui.utils.gui_utils import safe_configure
 
 
@@ -15,15 +15,15 @@ class ConnectionMixin:
     CONNECTIONS_FILE = "~/.connections.json"
 
     def __init__(self):
-        self.connections: List[Dict] = []
-        self.connection_names: List[str] = []
+        self.connections: list[dict] = []
+        self.connection_names: list[str] = []
 
     def load_connections_and_update(self):
         """加载连接并更新下拉框"""
         try:
             connections_file = Path(self.CONNECTIONS_FILE).expanduser()
             if connections_file.exists():
-                with open(connections_file, "r", encoding="utf-8") as f:
+                with open(connections_file, encoding="utf-8") as f:
                     data = json.load(f)
                     # 处理不同格式
                     if isinstance(data, dict):
@@ -84,7 +84,10 @@ class ConnectionMixin:
                 return
 
             names = [
-                f"{c.get('name', '未命名连接')} ({c.get('host', '')}:{c.get('port', '')})"
+                (
+                    f"{c.get('name', '未命名连接')} "
+                    f"({c.get('host', '')}:{c.get('port', '')})"
+                )
                 for c in self.connections
             ]
             self.connection_names = names
@@ -125,7 +128,7 @@ class ConnectionMixin:
             if hasattr(self, "logger") and self.logger:
                 self.logger.error(f"更新连接下拉框失败: {str(e)}")
 
-    def get_selected_connection_name(self) -> Optional[str]:
+    def get_selected_connection_name(self) -> str | None:
         """获取当前选中连接的名称"""
         try:
             current_value = self.connection_var.get()
@@ -136,7 +139,7 @@ class ConnectionMixin:
             pass
         return None
 
-    def find_connection_index_by_name(self, name: str) -> Optional[int]:
+    def find_connection_index_by_name(self, name: str) -> int | None:
         """通过连接名称查找索引"""
         if not name:
             return None
@@ -145,7 +148,7 @@ class ConnectionMixin:
                 return i
         return None
 
-    def get_selected_connection(self) -> Optional[Dict]:
+    def get_selected_connection(self) -> dict | None:
         """获取当前选中的连接配置"""
         selected_name = self.get_selected_connection_name()
         selected_index = self.find_connection_index_by_name(selected_name)
@@ -166,7 +169,7 @@ class ConfigMixin:
 
         self.config_manager = ConfigManager(config_file)
 
-    def save_config(self, config: Dict) -> bool:
+    def save_config(self, config: dict) -> bool:
         """保存配置"""
         from core.importer_csv import logger as core_logger
 
@@ -175,7 +178,7 @@ class ConfigMixin:
             self.logger.warning("配置保存失败")
         return success
 
-    def load_config(self) -> Optional[Dict]:
+    def load_config(self) -> dict | None:
         """加载配置"""
         from core.importer_csv import logger as core_logger
 

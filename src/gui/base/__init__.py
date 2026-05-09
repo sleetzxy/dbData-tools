@@ -3,6 +3,6 @@
 """
 
 from gui.base.base_page import BaseToolPage
-from gui.base.mixins import ConnectionMixin, ConfigMixin
+from gui.base.mixins import ConfigMixin, ConnectionMixin
 
 __all__ = ["BaseToolPage", "ConnectionMixin", "ConfigMixin"]

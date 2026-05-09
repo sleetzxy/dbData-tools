@@ -2,18 +2,17 @@
 基础页面类 - 所有工具页面的基类
 """
 
-import tkinter as tk
-import customtkinter as ctk
 import threading
+import tkinter as tk
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Callable
 from tkinter import messagebox
 
-from gui.base.mixins import ConnectionMixin, ConfigMixin
+import customtkinter as ctk
+
+from gui.base.mixins import ConnectionMixin
 from gui.styling.themes import get_idea_dark_colors, init_theme
-from gui.widgets.frames import ScrollableFrame, LogPanel
-from gui.widgets.labels import TitleLabel
 from gui.utils.gui_utils import safe_configure
+from gui.widgets.frames import LogPanel, ScrollableFrame
 from utils.log_handler import setup_logger
 
 
@@ -130,7 +129,7 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
         pass
 
     @abstractmethod
-    def get_config_dict(self) -> Dict:
+    def get_config_dict(self) -> dict:
         """
         返回要保存的配置字典 (子类必须实现)
 
@@ -140,7 +139,7 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
         pass
 
     @abstractmethod
-    def apply_config(self, config: Dict):
+    def apply_config(self, config: dict):
         """
         应用加载的配置 (子类必须实现)
 
@@ -150,7 +149,7 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
         pass
 
     @abstractmethod
-    def execute_task(self) -> Dict:
+    def execute_task(self) -> dict:
         """
         执行主要任务 (子类必须实现)
 
@@ -231,12 +230,14 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
 
                 self.root.after(0, update_ui)
 
-            except Exception as e:
-                # 在主线程中显示错误
+            except Exception as exc:
+                err_text = str(exc)
+
+                # 在主线程中显示错误（闭包内须捕获文案，避免异步时异常名失效）
                 def show_error():
                     if button_widget:
                         safe_configure(button_widget, state="normal", text=button_text)
-                    messagebox.showerror("错误", f"任务失败: {str(e)}")
+                    messagebox.showerror("错误", f"任务失败: {err_text}")
                     if hasattr(self, "logger") and self.logger:
                         self.logger.exception("任务执行过程中发生异常")
 

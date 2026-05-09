@@ -3,10 +3,12 @@
 """
 
 import tkinter as tk
+
 import customtkinter as ctk
+
+from gui.styling.themes import get_idea_dark_colors
 from gui.widgets.labels import StyledLabel
 from gui.widgets.option_menus import StyledOptionMenu
-from gui.styling.themes import get_idea_dark_colors
 
 
 class ConnectionSelector(ctk.CTkFrame):

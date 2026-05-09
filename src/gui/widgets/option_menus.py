@@ -1,4 +1,5 @@
 import customtkinter as ctk
+
 from gui.styling.themes import get_idea_dark_colors
 
 

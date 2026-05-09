@@ -3,12 +3,14 @@
 """
 
 import tkinter as tk
-import customtkinter as ctk
 from tkinter import filedialog
-from gui.widgets.labels import StyledLabel
-from gui.widgets.entries import StyledEntry
-from gui.widgets.buttons import StyledButton
+
+import customtkinter as ctk
+
 from gui.styling.themes import get_idea_dark_colors
+from gui.widgets.buttons import StyledButton
+from gui.widgets.entries import StyledEntry
+from gui.widgets.labels import StyledLabel
 
 
 class PathSelector(ctk.CTkFrame):

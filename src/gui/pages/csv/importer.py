@@ -2,19 +2,19 @@
 重构后的 CSV 导入页面 - 使用新的基类和组件架构
 """
 
-import tkinter as tk
 import os
 import re
-from tkinter import messagebox
-from pypinyin import lazy_pinyin, Style
+import tkinter as tk
 
+from pypinyin import Style, lazy_pinyin
+
+from core.importer_csv import import_csv_to_db
+from core.importer_csv import logger as core_logger
 from gui.base import BaseToolPage
 from gui.components import ConnectionSelector, PathSelector
-from gui.widgets.labels import TitleLabel, StyledLabel
-from gui.widgets.entries import StyledEntry
 from gui.widgets.buttons import PrimaryButton
-from gui.widgets.option_menus import StyledOptionMenu
-from core.importer_csv import import_csv_to_db, logger as core_logger
+from gui.widgets.entries import StyledEntry
+from gui.widgets.labels import StyledLabel, TitleLabel
 
 
 class ImportCsvPage(BaseToolPage):

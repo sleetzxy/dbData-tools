@@ -1,7 +1,8 @@
 import tkinter as tk
 from tkinter import scrolledtext
-from gui.styling.themes import get_idea_dark_colors
+
 from gui.styling.styles import style_tk_scrollbar
+from gui.styling.themes import get_idea_dark_colors
 
 
 class StyledScrolledText(scrolledtext.ScrolledText):

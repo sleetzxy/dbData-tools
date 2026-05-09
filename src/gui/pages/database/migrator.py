@@ -5,15 +5,16 @@
 import tkinter as tk
 from tkinter import messagebox
 
+from core.migrator import logger as core_logger
+from core.migrator import migrate_tables
 from gui.base import BaseToolPage
 from gui.components import ConnectionSelector
-from gui.widgets.labels import (
-    TitleLabel,
-    StyledLabel,
-)  # StyledLabel used in table input label
 from gui.widgets.buttons import PrimaryButton
+from gui.widgets.labels import (
+    StyledLabel,
+    TitleLabel,
+)  # StyledLabel used in table input label
 from gui.widgets.scrolled_texts import StyledScrolledText
-from core.migrator import migrate_tables, logger as core_logger
 
 
 class MigratorPage(BaseToolPage):
@@ -147,7 +148,10 @@ class MigratorPage(BaseToolPage):
         if not selected or selected in ("", "无可用连接"):
             return None
         for conn in self.connections:
-            label = f"{conn.get('name', '未命名连接')} ({conn.get('host', '')}:{conn.get('port', '')})"
+            label = (
+                f"{conn.get('name', '未命名连接')} "
+                f"({conn.get('host', '')}:{conn.get('port', '')})"
+            )
             if label == selected:
                 return conn
         return None

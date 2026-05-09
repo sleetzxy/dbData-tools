@@ -1,15 +1,13 @@
 """气泡式工具提示管理器。
 
 从 ``main_gui.py`` 抽出，便于复用与单独维护。
-仅依赖 Tkinter 与 ``gui.styling.themes``，不引入新依赖。
+仅依赖 Tkinter，不引入新依赖。
 """
 
 from __future__ import annotations
 
 import logging
 import tkinter as tk
-
-from gui.styling.themes import get_idea_dark_colors
 
 logger = logging.getLogger(__name__)
 
@@ -122,9 +120,7 @@ class ToolTipManager:
                 trans_color = None  # 不支持透明则回退
 
             # 气泡样式（白色背景）
-            colors = get_idea_dark_colors()
             bubble_bg = "#ffffff"
-            border = "#d0d0d0"
             text_color = "#333333"
             font_cfg = ("Microsoft YaHei", 9)
 
@@ -232,7 +228,7 @@ class ToolTipManager:
     def hide_tip(self):
         """隐藏所有工具提示"""
         # 取消所有延迟显示
-        for widget, tip_id in list(self.tip_ids.items()):
+        for _widget, tip_id in list(self.tip_ids.items()):
             if tip_id:
                 self.root.after_cancel(tip_id)
         self.tip_ids.clear()
@@ -245,7 +241,7 @@ class ToolTipManager:
                 pass
             self.current_tip = None
 
-        for widget, tip in list(self.tip_windows.items()):
+        for _widget, tip in list(self.tip_windows.items()):
             if tip:
                 try:
                     tip.destroy()

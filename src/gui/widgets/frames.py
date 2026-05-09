@@ -1,8 +1,10 @@
 import tkinter as tk
-import customtkinter as ctk
 from tkinter import scrolledtext
-from gui.styling.themes import get_idea_dark_colors
+
+import customtkinter as ctk
+
 from gui.styling.styles import style_tk_scrollbar
+from gui.styling.themes import get_idea_dark_colors
 
 
 class ScrollableFrame(ctk.CTkFrame):

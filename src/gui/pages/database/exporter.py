@@ -5,12 +5,13 @@
 import tkinter as tk
 from tkinter import messagebox
 
+from core.exporter_db import export_database_to_sql
+from core.exporter_db import logger as core_logger
 from gui.base import BaseToolPage
 from gui.components import ConnectionSelector, PathSelector
-from gui.widgets.labels import TitleLabel, StyledLabel
 from gui.widgets.buttons import PrimaryButton
+from gui.widgets.labels import StyledLabel, TitleLabel
 from gui.widgets.scrolled_texts import StyledScrolledText
-from core.exporter_db import export_database_to_sql, logger as core_logger
 
 
 class ExportDbPage(BaseToolPage):
@@ -110,7 +111,10 @@ class ExportDbPage(BaseToolPage):
                 idx = self.find_connection_index_by_name(selected_name)
                 if idx is not None and idx >= 0:
                     connection_names = [
-                        f"{c.get('name', '未命名连接')} ({c.get('host', '')}:{c.get('port', '')})"
+                        (
+                            f"{c.get('name', '未命名连接')} "
+                            f"({c.get('host', '')}:{c.get('port', '')})"
+                        )
                         for c in self.connections
                     ]
                     if idx < len(connection_names):

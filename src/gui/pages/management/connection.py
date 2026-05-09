@@ -7,19 +7,20 @@
 """
 
 import copy
-import tkinter as tk
-from tkinter import messagebox
 import json
+import tkinter as tk
 from pathlib import Path
+from tkinter import messagebox
+
 import customtkinter as ctk
 
+from db.connection import normalize_connection_config
 from gui.styling.themes import get_idea_dark_colors
-from gui.widgets.buttons import StyledButton, PrimaryButton
-from gui.widgets.labels import StyledLabel, TitleLabel
+from gui.widgets.buttons import PrimaryButton, StyledButton
 from gui.widgets.entries import StyledEntry
 from gui.widgets.frames import ScrollableFrame
+from gui.widgets.labels import StyledLabel, TitleLabel
 from gui.widgets.option_menus import StyledOptionMenu
-from db.connection import normalize_connection_config
 
 CONNECTIONS_FILE = "~/.connections.json"
 DB_TYPE_OPTIONS = [
@@ -79,7 +80,6 @@ class ConnectionManager(ctk.CTkFrame):
         - 弹窗模式：兼容旧逻辑
         - 嵌入模式：在父容器中创建页面，并应用统一主题
         """
-        import customtkinter as ctk
 
         if as_popup and hasattr(self, "_window_initialized"):
             self._show_existing_window()
@@ -188,8 +188,9 @@ class ConnectionManager(ctk.CTkFrame):
 
     def create_widgets(self):
         """创建界面组件（统一深色风格，自绘行列表，行内操作）"""
-        import customtkinter as ctk
         import tkinter as tk
+
+        import customtkinter as ctk
 
         # 设置背景色
         self._root_container.configure(fg_color=self.colors["bg"])
@@ -312,7 +313,7 @@ class ConnectionManager(ctk.CTkFrame):
         return self.colors.get("bg_secondary", "#3c3f41")
 
     def _sync_row_selection_styles(self):
-        """根据 self.selected_index 刷新当前页各行的底色（不整表重建，避免滚动条跳动）。"""
+        """根据 selected_index 刷新当前页各行底色（不整表重建，避免滚动条跳动）。"""
         if not getattr(self, "_visible_row_frames", None):
             return
         for gidx, row_frame in self._visible_row_frames:
@@ -561,7 +562,7 @@ class ConnectionManager(ctk.CTkFrame):
         try:
             connections_path = Path(CONNECTIONS_FILE).expanduser()
             if connections_path.exists():
-                with open(connections_path, "r", encoding="utf-8") as f:
+                with open(connections_path, encoding="utf-8") as f:
                     loaded_connections = json.load(f)
                     if isinstance(loaded_connections, dict):
                         legacy_connections = loaded_connections.get("connections")
@@ -593,7 +594,8 @@ class ConnectionManager(ctk.CTkFrame):
                             name = item.get("name", "<unknown>")
                             db_type = item.get("db_type", "<missing>")
                             skipped_records.append(
-                                f"index={index}, name={name}, db_type={db_type}, reason={item_error}"
+                                f"index={index}, name={name}, "
+                                f"db_type={db_type}, reason={item_error}"
                             )
 
                     if skipped_records:

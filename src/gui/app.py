@@ -329,7 +329,6 @@ class MainApplication:
 
     def _show_page(self, name, builder=None):
         """显示指定名称的页面，页面不存在时按需创建"""
-        import customtkinter as ctk
 
         # 如果页面不存在且提供了构建器，创建并缓存
         if name not in self.pages and builder is not None:
