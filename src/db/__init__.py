@@ -1,1 +1,1 @@
-# 数据库操作相关模块
+"""Database drivers, connection helpers, and adapter registry."""

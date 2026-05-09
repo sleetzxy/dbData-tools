@@ -1,13 +1,19 @@
+"""ClickHouse adapter: CSV flows and SQL export via ``clickhouse_connect``."""
+
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 from core.importer_csv import generate_copy_commands, read_sql_from_file
+from db.exceptions import ClientCapabilityError
 
 
 class ClickHouseAdapter:
+    """Backend implementation for ClickHouse ``DatabaseAdapter`` workflows."""
+
     db_type = "clickhouse"
 
     @classmethod
@@ -21,7 +27,15 @@ class ClickHouseAdapter:
     def _quote_identifier(name: str) -> str:
         return f"`{name.replace('`', '``')}`"
 
-    def create_client(self, db_config: Dict[str, Any]) -> Any:
+    def _qualified_table(self, database: str, table_name: str) -> str:
+        """Return ``database.table`` with each segment quoted."""
+        return (
+            f"{self._quote_identifier(database)}."
+            f"{self._quote_identifier(table_name)}"
+        )
+
+    def create_client(self, db_config: dict[str, Any]) -> Any:
+        """Build a ``clickhouse_connect`` client for ``db_config``."""
         import clickhouse_connect
 
         return clickhouse_connect.get_client(
@@ -33,6 +47,7 @@ class ClickHouseAdapter:
         )
 
     def close_client(self, client: Any) -> None:
+        """Shut down ``client`` using ``close`` or ``disconnect`` when present."""
         if hasattr(client, "close"):
             client.close()
             return
@@ -43,9 +58,9 @@ class ClickHouseAdapter:
         self,
         client: Any,
         database: str,
-        table_names: List[str],
+        table_names: list[str],
         backup_dir: str,
-        logger: Optional[Any] = None,
+        logger: Any | None = None,
     ) -> str:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         backup_path = os.path.join(backup_dir, timestamp)
@@ -53,14 +68,13 @@ class ClickHouseAdapter:
 
         for table in table_names:
             table_name = self._validate_identifier(str(table).strip(), "table")
-            qualified = f"{self._quote_identifier(database)}.{self._quote_identifier(table_name)}"
+            qualified = self._qualified_table(database, table_name)
             backup_file = os.path.join(backup_path, f"{table_name}.csv")
             query = f"SELECT * FROM {qualified} FORMAT CSVWithNames"
 
             if logger:
-                logger.info(
-                    f"\u6b63\u5728\u5907\u4efd\u8868 {database}.{table_name} -> {backup_file}"
-                )
+                msg = f"\u6b63\u5728\u5907\u4efd\u8868 {database}.{table_name}"
+                logger.info("%s -> %s", msg, backup_file)
 
             if hasattr(client, "raw_stream"):
                 stream = client.raw_stream(query)
@@ -84,7 +98,7 @@ class ClickHouseAdapter:
                 with open(backup_file, "wb") as f:
                     f.write(data)
             else:
-                raise RuntimeError(
+                raise ClientCapabilityError(
                     "ClickHouse client does not support raw backup query"
                 )
 
@@ -93,13 +107,14 @@ class ClickHouseAdapter:
     def export_csv(
         self,
         client: Any,
-        db_config: Dict[str, Any],
-        tables: List[str],
+        db_config: dict[str, Any],
+        tables: list[str],
         export_dir: str,
         schema: str = "",
         include_header: bool = True,
-        logger: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        logger: Any | None = None,
+    ) -> dict[str, Any]:
+        """Stream tables to CSV files using ``raw_stream`` / ``raw_query``."""
         database = self._validate_identifier(
             str(db_config.get("database", "")).strip(), "database"
         )
@@ -123,7 +138,7 @@ class ClickHouseAdapter:
                     )
 
                 format_name = "CSVWithNames" if include_header else "CSV"
-                qualified = f"{self._quote_identifier(database)}.{self._quote_identifier(table_name)}"
+                qualified = self._qualified_table(database, table_name)
                 query = f"SELECT * FROM {qualified} FORMAT {format_name}"
 
                 if hasattr(client, "raw_stream"):
@@ -169,7 +184,10 @@ class ClickHouseAdapter:
 
                 if logger:
                     logger.info(
-                        f"Export finished for {database}.{table_name}, rows: {row_count}"
+                        "Export finished for %s.%s, rows: %s",
+                        database,
+                        table_name,
+                        row_count,
                     )
             except Exception as exc:
                 error_msg = f"Export failed for {database}.{table}: {exc}"
@@ -189,15 +207,16 @@ class ClickHouseAdapter:
     def import_csv(
         self,
         client: Any,
-        db_config: Dict[str, Any],
-        table_names: List[str],
+        db_config: dict[str, Any],
+        table_names: list[str],
         data_dir: str,
         schema: str = "",
         pre_sql_file: str = "",
         need_backup: bool = False,
         truncate_before: bool = True,
-        logger: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        logger: Any | None = None,
+    ) -> dict[str, Any]:
+        """Load CSV files via ``INSERT ... FORMAT CSVWithNames``."""
         database = self._validate_identifier(
             str(db_config.get("database", "")).strip(), "database"
         )
@@ -209,7 +228,6 @@ class ClickHouseAdapter:
             "data_directory": data_dir,
             "schema": "",
         }
-
         if not table_names:
             result["success"] = False
             result["error"] = "\u672a\u627e\u5230\u9700\u8981\u5bfc\u5165\u7684\u8868"
@@ -256,11 +274,13 @@ class ClickHouseAdapter:
         for table, csv_file in copy_commands:
             try:
                 table_name = self._validate_identifier(str(table).strip(), "table")
-                qualified = f"{self._quote_identifier(database)}.{self._quote_identifier(table_name)}"
+                qualified = self._qualified_table(database, table_name)
                 if logger:
-                    logger.info(
-                        f"\u6b63\u5728\u5bfc\u5165 {database}.{table_name} <- {csv_file}"
+                    msg = (
+                        f"\u6b63\u5728\u5bfc\u5165 {database}.{table_name} "
+                        f"<- {csv_file}"
                     )
+                    logger.info(msg)
                 if hasattr(client, "command"):
                     if truncate_before:
                         client.command(f"TRUNCATE TABLE {qualified}")
@@ -271,7 +291,9 @@ class ClickHouseAdapter:
                             data=data,
                         )
                 else:
-                    raise RuntimeError("ClickHouse client does not support command()")
+                    raise ClientCapabilityError(
+                        "ClickHouse client does not support command()"
+                    )
 
                 result["imported_tables"].append(table_name)
                 if logger:
@@ -288,9 +310,9 @@ class ClickHouseAdapter:
         return result
 
     @staticmethod
-    def _split_sql_statements(sql_text: str) -> List[str]:
-        statements: List[str] = []
-        buffer: List[str] = []
+    def _split_sql_statements(sql_text: str) -> list[str]:
+        statements: list[str] = []
+        buffer: list[str] = []
         i = 0
         in_single = False
         in_double = False
@@ -360,7 +382,8 @@ class ClickHouseAdapter:
 
         return statements
 
-    def export_sql(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+    def export_sql(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Emit DDL and row ``INSERT`` statements for all tables in a database."""
         client = kwargs.get("client")
         db_config = kwargs.get("db_config", {})
         export_dir = kwargs.get("export_dir")
@@ -374,7 +397,7 @@ class ClickHouseAdapter:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         export_file = os.path.join(export_dir, f"{database}_{timestamp}.sql")
 
-        def _extract_rows(result: Any) -> Sequence[Tuple[Any, ...]]:
+        def _extract_rows(result: Any) -> Sequence[tuple[Any, ...]]:
             if hasattr(result, "result_rows"):
                 return result.result_rows
             if hasattr(result, "result_set"):
@@ -383,7 +406,7 @@ class ClickHouseAdapter:
                 return result
             return []
 
-        def _query(statement: str) -> Sequence[Tuple[Any, ...]]:
+        def _query(statement: str) -> Sequence[tuple[Any, ...]]:
             if hasattr(client, "query"):
                 return _extract_rows(client.query(statement))
             if hasattr(client, "raw_query"):
@@ -391,7 +414,7 @@ class ClickHouseAdapter:
                 if isinstance(response, (list, tuple)):
                     return response
                 return []
-            raise RuntimeError("ClickHouse client does not support query")
+            raise ClientCapabilityError("ClickHouse client does not support query")
 
         def _serialize_value(value: Any) -> str:
             if value is None:
@@ -428,7 +451,7 @@ class ClickHouseAdapter:
 
                 for table in tables:
                     table_name = self._validate_identifier(table, "table")
-                    qualified = f"{self._quote_identifier(database)}.{self._quote_identifier(table_name)}"
+                    qualified = self._qualified_table(database, table_name)
 
                     if logger:
                         logger.info(f"Exporting table {database}.{table_name}")
@@ -463,9 +486,11 @@ class ClickHouseAdapter:
                             values_str = ", ".join(
                                 _serialize_value(value) for value in row
                             )
-                            f.write(
-                                f"INSERT INTO {qualified} ({columns_str}) VALUES ({values_str});\n"
+                            insert_line = (
+                                f"INSERT INTO {qualified} ({columns_str}) "
+                                f"VALUES ({values_str});\n"
                             )
+                            f.write(insert_line)
 
                     f.write("\n")
 

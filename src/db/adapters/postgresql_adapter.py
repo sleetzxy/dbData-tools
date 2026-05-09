@@ -1,8 +1,10 @@
+"""PostgreSQL adapter: CSV import/export and SQL dump helpers via ``psycopg2``."""
+
 from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import psycopg2
 from psycopg2 import sql
@@ -10,12 +12,27 @@ from psycopg2 import sql
 from core.importer_csv import generate_copy_commands, read_sql_from_file
 
 
+def _quote_pg_ident_segment(name: str) -> str:
+    """Quote a PostgreSQL identifier for server-side SQL text (not parameters).
+
+    Used when composing COPY text without a live ``psycopg2`` quoting context,
+    such as lightweight test doubles.
+
+    :param name: Identifier fragment (schema, table, or column).
+    :return: Double-quoted, escaped identifier string.
+    """
+    return '"' + str(name).replace('"', '""') + '"'
+
+
 class PostgreSQLAdapter:
+    """Backend implementation for PostgreSQL ``DatabaseAdapter`` operations."""
+
     db_type = "postgresql"
 
     def create_client(
-        self, db_config: Dict[str, Any]
+        self, db_config: dict[str, Any]
     ) -> psycopg2.extensions.connection:
+        """Open a ``psycopg2`` connection using normalized ``db_config`` keys."""
         return psycopg2.connect(
             host=db_config["host"],
             port=db_config["port"],
@@ -25,21 +42,22 @@ class PostgreSQLAdapter:
         )
 
     def close_client(self, client: psycopg2.extensions.connection) -> None:
+        """Close ``client`` if it is still open."""
         client.close()
 
     @staticmethod
     def _get_table_counts(
         client: psycopg2.extensions.connection,
         schema: str,
-        table_names: List[str],
-        logger: Optional[Any] = None,
-    ) -> Dict[str, int]:
+        table_names: list[str],
+        logger: Any | None = None,
+    ) -> dict[str, int]:
         if not table_names:
             return {}
 
         try:
             with client.cursor() as cursor:
-                counts: Dict[str, int] = {}
+                counts: dict[str, int] = {}
                 for table in table_names:
                     count_query = sql.SQL("SELECT COUNT(1) FROM {}.{}").format(
                         sql.Identifier(schema),
@@ -49,7 +67,11 @@ class PostgreSQLAdapter:
                     row = cursor.fetchone()
                     counts[table] = row[0] if row else 0
                 return counts
-        except Exception as exc:
+        except (
+            psycopg2.Error,
+            AttributeError,
+            TypeError,
+        ) as exc:
             if logger:
                 logger.error(f"Failed to get row counts: {exc}")
             return {}
@@ -58,9 +80,9 @@ class PostgreSQLAdapter:
     def _backup_tables(
         client: psycopg2.extensions.connection,
         schema: str,
-        table_names: List[str],
+        table_names: list[str],
         backup_dir: str,
-        logger: Optional[Any] = None,
+        logger: Any | None = None,
     ) -> str:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         backup_path = os.path.join(backup_dir, timestamp)
@@ -74,7 +96,8 @@ class PostgreSQLAdapter:
                 try:
                     with open(backup_file, "w", encoding="utf-8") as f:
                         backup_sql = sql.SQL(
-                            "COPY (SELECT * FROM {}.{}) TO STDOUT WITH (FORMAT CSV, HEADER true, DELIMITER ',', ENCODING 'UTF8')"
+                            "COPY (SELECT * FROM {}.{}) TO STDOUT WITH ("
+                            "FORMAT CSV, HEADER true, DELIMITER ',', ENCODING 'UTF8')"
                         ).format(
                             sql.Identifier(schema),
                             sql.Identifier(table),
@@ -82,7 +105,7 @@ class PostgreSQLAdapter:
                         cursor.copy_expert(backup_sql.as_string(client), f)
                     if logger:
                         logger.info(f"Table {table} backup completed -> {backup_file}")
-                except Exception as exc:
+                except (OSError, psycopg2.Error) as exc:
                     if logger:
                         logger.error(f"Table {table} backup failed: {exc}")
 
@@ -92,7 +115,7 @@ class PostgreSQLAdapter:
     def _execute_pre_sql(
         client: psycopg2.extensions.connection,
         pre_sql: str,
-        logger: Optional[Any] = None,
+        logger: Any | None = None,
     ) -> None:
         if not pre_sql.strip():
             if logger:
@@ -102,17 +125,17 @@ class PostgreSQLAdapter:
         if logger:
             logger.info("Starting pre-SQL execution")
 
-        def split_sql_statements(sql_text: str) -> List[str]:
-            statements: List[str] = []
-            buffer: List[str] = []
+        def split_sql_statements(sql_text: str) -> list[str]:
+            statements: list[str] = []
+            buffer: list[str] = []
             i = 0
             in_single = False
             in_double = False
             in_line_comment = False
             in_block_comment = False
-            dollar_tag: Optional[str] = None
+            dollar_tag: str | None = None
 
-            def _match_dollar_tag(text: str, start: int) -> Optional[str]:
+            def _match_dollar_tag(text: str, start: int) -> str | None:
                 if text[start] != "$":
                     return None
                 end = text.find("$", start + 1)
@@ -228,7 +251,10 @@ class PostgreSQLAdapter:
                     )
                     if logger:
                         logger.info(
-                            f"Executing SQL statement {i}/{len(sql_statements)}: {sql_preview}"
+                            "Executing SQL statement %s/%s: %s",
+                            i,
+                            len(sql_statements),
+                            sql_preview,
                         )
 
                     cursor.execute(sql_statement)
@@ -241,10 +267,13 @@ class PostgreSQLAdapter:
                             )
                         else:
                             logger.info("DDL executed successfully")
-                except Exception as exc:
+                except psycopg2.Error as exc:
                     if logger:
+                        stmt_preview = f"{sql_statement[:200]}..."
                         logger.error(
-                            f"SQL execution failed - statement {i}: {sql_statement[:200]}..."
+                            "SQL execution failed - statement %s: %s",
+                            i,
+                            stmt_preview,
                         )
                         logger.error(f"Error details: {str(exc)}")
 
@@ -261,13 +290,14 @@ class PostgreSQLAdapter:
     def export_csv(
         self,
         client: psycopg2.extensions.connection,
-        db_config: Dict[str, Any],
-        tables: List[str],
+        db_config: dict[str, Any],
+        tables: list[str],
         export_dir: str,
         schema: str = "public",
         include_header: bool = True,
-        logger: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        logger: Any | None = None,
+    ) -> dict[str, Any]:
+        """Export ``tables`` from ``schema`` into CSV files under ``export_dir``."""
         result = {
             "success": True,
             "exported_tables": [],
@@ -283,7 +313,8 @@ class PostgreSQLAdapter:
             os.makedirs(export_dir, exist_ok=True)
 
             cursor.execute(
-                "SELECT schema_name FROM information_schema.schemata WHERE schema_name = %s",
+                "SELECT schema_name FROM information_schema.schemata "
+                "WHERE schema_name = %s",
                 (schema,),
             )
             if not cursor.fetchone():
@@ -329,9 +360,12 @@ class PostgreSQLAdapter:
 
                     if logger:
                         logger.info(
-                            f"Table {schema}.{table} exported successfully, rows: {row_count}"
+                            "Table %s.%s exported successfully, rows: %s",
+                            schema,
+                            table,
+                            row_count,
                         )
-                except Exception as exc:
+                except (OSError, psycopg2.Error) as exc:
                     error_msg = f"Export failed for table {schema}.{table}: {str(exc)}"
                     if logger:
                         logger.error(error_msg)
@@ -343,7 +377,7 @@ class PostgreSQLAdapter:
                         }
                     )
                     result["success"] = False
-        except Exception as exc:
+        except (OSError, psycopg2.Error) as exc:
             error_msg = f"Export process failed: {str(exc)}"
             if logger:
                 logger.error(error_msg)
@@ -358,15 +392,16 @@ class PostgreSQLAdapter:
     def import_csv(
         self,
         client: psycopg2.extensions.connection,
-        db_config: Dict[str, Any],
-        table_names: List[str],
+        db_config: dict[str, Any],
+        table_names: list[str],
         data_dir: str,
         schema: str = "public",
         pre_sql_file: str = "",
         need_backup: bool = False,
         truncate_before: bool = True,
-        logger: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        logger: Any | None = None,
+    ) -> dict[str, Any]:
+        """Bulk-load CSVs for ``table_names`` with optional backup and pre-SQL."""
         schema = schema.strip() if isinstance(schema, str) else schema
         if not schema:
             schema = "public"
@@ -386,7 +421,10 @@ class PostgreSQLAdapter:
             return result
 
         try:
-            if client.status != psycopg2.extensions.STATUS_READY:
+            status = getattr(
+                client, "status", psycopg2.extensions.STATUS_READY
+            )
+            if status != psycopg2.extensions.STATUS_READY:
                 client.rollback()
             client.autocommit = False
 
@@ -408,7 +446,7 @@ class PostgreSQLAdapter:
                     self._execute_pre_sql(client, pre_sql, logger)
                     if logger:
                         logger.info("Pre-SQL executed successfully")
-                except Exception as exc:
+                except (OSError, UnicodeError, ValueError, psycopg2.Error) as exc:
                     error_msg = f"Pre-SQL execution failed: {str(exc)}"
                     if logger:
                         logger.error(error_msg)
@@ -419,7 +457,7 @@ class PostgreSQLAdapter:
 
             copy_commands = generate_copy_commands(table_names, data_dir)
 
-            imported_tables: List[str] = []
+            imported_tables: list[str] = []
             for table, csv_file in copy_commands:
                 try:
                     if logger:
@@ -434,7 +472,7 @@ class PostgreSQLAdapter:
                             if logger:
                                 logger.info(f"Table {schema}.{table} truncated")
 
-                        with open(csv_file, "r", encoding="utf-8") as f:
+                        with open(csv_file, encoding="utf-8") as f:
                             header_line = f.readline().strip()
                             columns = [
                                 col.strip()
@@ -444,7 +482,9 @@ class PostgreSQLAdapter:
                             f.seek(0)
 
                             copy_sql = sql.SQL(
-                                "COPY {}.{} ({}) FROM STDOUT WITH (DELIMITER ',', FORMAT CSV, HEADER true, ENCODING 'UTF8', QUOTE '\"', ESCAPE '\"')"
+                                "COPY {}.{} ({}) FROM STDOUT WITH ("
+                                "DELIMITER ',', FORMAT CSV, HEADER true, "
+                                "ENCODING 'UTF8', QUOTE '\"', ESCAPE '\"')"
                             ).format(
                                 sql.Identifier(schema),
                                 sql.Identifier(table),
@@ -452,12 +492,27 @@ class PostgreSQLAdapter:
                                     sql.Identifier(col) for col in columns
                                 ),
                             )
-                            cursor.copy_expert(copy_sql.as_string(client), f)
+                            if isinstance(client, psycopg2.extensions.connection):
+                                copy_stmt = copy_sql.as_string(cursor)
+                            else:
+                                cols_join = ", ".join(
+                                    _quote_pg_ident_segment(c) for c in columns
+                                )
+                                schema_tbl = (
+                                    f"{_quote_pg_ident_segment(schema)}."
+                                    f"{_quote_pg_ident_segment(table)}"
+                                )
+                                copy_stmt = (
+                                    f"COPY {schema_tbl} ({cols_join}) FROM STDOUT "
+                                    "WITH (DELIMITER ',', FORMAT CSV, HEADER true, "
+                                    "ENCODING 'UTF8', QUOTE '\"', ESCAPE '\"')"
+                                )
+                            cursor.copy_expert(copy_stmt, f)
 
                     imported_tables.append(table)
                     if logger:
                         logger.info(f"Table {schema}.{table} imported successfully")
-                except Exception as exc:
+                except (OSError, psycopg2.Error, RuntimeError) as exc:
                     error_msg = f"Import failed for {schema}.{table}: {str(exc)}"
                     if logger:
                         logger.error(error_msg)
@@ -492,7 +547,7 @@ class PostgreSQLAdapter:
                     logger.warning("Import encountered errors, transaction rolled back")
                 client.rollback()
                 result["imported_tables"] = []
-        except Exception as exc:
+        except (OSError, psycopg2.Error, RuntimeError, ValueError) as exc:
             error_msg = f"Import process failed: {str(exc)}"
             if logger:
                 logger.error(error_msg)
@@ -501,12 +556,16 @@ class PostgreSQLAdapter:
             result["imported_tables"] = []
             try:
                 client.rollback()
-            except Exception:
+            except psycopg2.Error:
                 pass
 
         return result
 
-    def export_sql(self, *args: Any, **kwargs: Any) -> None:
+    def export_sql(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Write schema data and DDL for ``schema`` into a single ``.sql`` file.
+
+        :return: Summary dict with ``success``, ``export_file``, or ``error``.
+        """
         client = kwargs.get("client")
         db_config = kwargs.get("db_config", {})
         export_dir = kwargs.get("export_dir")
@@ -527,7 +586,7 @@ class PostgreSQLAdapter:
                     client.set_isolation_level(
                         psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT
                     )
-                except Exception:
+                except psycopg2.Error:
                     pass
 
             with client.cursor() as cursor:
@@ -599,16 +658,18 @@ class PostgreSQLAdapter:
 
                                 columns_str = '", "'.join(column_names)
                                 values_str = ", ".join(values)
-                                f.write(
-                                    f'INSERT INTO "{table}" ("{columns_str}") VALUES ({values_str});\n'
+                                line = (
+                                    f'INSERT INTO "{table}" ("{columns_str}") '
+                                    f"VALUES ({values_str});\n"
                                 )
+                                f.write(line)
 
                         f.write("\n")
 
             if logger:
                 logger.info("Database export completed")
             return {"success": True, "schema": schema, "export_file": export_file}
-        except Exception as exc:
+        except (OSError, psycopg2.Error, RuntimeError, ValueError) as exc:
             if logger:
                 logger.error(f"Export failed: {str(exc)}")
             return {"success": False, "error": str(exc), "schema": schema}
