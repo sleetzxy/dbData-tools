@@ -1,16 +1,16 @@
+"""命名日志记录器的创建与简单控制台输出配置。"""
+
 import logging
 
 
 def get_logger(logger_name: str, level: int = logging.DEBUG) -> logging.Logger:
-    """
-    获取或创建一个命名的日志记录器
+    """获取或创建带控制台处理器的命名日志记录器。
 
-    参数:
-        logger_name: 日志记录器名称
-        level: 日志级别，默认为DEBUG
+    若记录器已有处理器则直接返回，避免重复挂载。
 
-    返回:
-        配置好的logger对象
+    :param logger_name: 记录器名称，通常使用模块级常量。
+    :param level: 记录器与控制台处理器的日志级别。
+    :return: 配置好的 ``Logger`` 实例。
     """
     logger = logging.getLogger(logger_name)
 

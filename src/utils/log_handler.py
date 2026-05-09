@@ -1,15 +1,21 @@
-import tkinter as tk
+"""将 ``logging`` 输出桥接到 Tkinter 文本类控件的 Handler 与装配函数。"""
+
+from __future__ import annotations
+
 import logging
+import tkinter as tk
 from typing import Any
 
 
 class TextHandler(logging.Handler):
-    """
-    自定义日志处理器，将日志输出到tkinter文本控件
-    增强版：处理文本控件状态，确保线程安全
-    """
+    """把日志记录写入 Tkinter 文本控件，并用 ``after`` 在主线程追加内容。"""
 
-    def __init__(self, text_widget: Any):
+    def __init__(self, text_widget: Any) -> None:
+        """创建处理器并配置按级别区分的文本标签颜色。
+
+        :param text_widget: 支持 ``configure``、``cget``、``tag_config``、
+            ``after``、``insert``、``see`` 的文本控件（含部分第三方封装）。
+        """
         super().__init__()
         self.text_widget = text_widget
         # 设置文本控件初始状态
@@ -33,33 +39,38 @@ class TextHandler(logging.Handler):
         self.text_widget.tag_config("DEBUG", foreground="#9CDCFE")  # 柔和的蓝色
 
     def emit(self, record: logging.LogRecord) -> None:
-        """重写emit方法，确保线程安全"""
+        """格式化记录并调度到主线程追加文本。
+
+        :param record: 当前日志记录。
+        """
         try:
             msg = self.format(record)
             self.text_widget.after(0, self._append_log, msg, record.levelname)
-        except Exception as e:
+        except (KeyError, TypeError, ValueError, tk.TclError) as e:
             print(f"日志输出失败: {e}")
 
     def _append_log(self, msg: str, level: str) -> None:
-        """实际追加日志到文本控件"""
+        """在 UI 线程中向控件尾部插入一行日志。
+
+        :param msg: 已格式化的日志文本。
+        :param level: 日志级别名称，用作 Tk 文本标签。
+        """
         try:
             self.text_widget.configure(state="normal")
             self.text_widget.insert(tk.END, msg + "\n", level)
             self.text_widget.see(tk.END)
             self.text_widget.configure(state="disabled")
-        except Exception as e:
+        except tk.TclError as e:
             print(f"追加日志失败: {e}")
 
 
-def setup_logger(text_widget: Any, logger: logging):
-    """
-    设置日志输出到GUI文本控件
+def setup_logger(text_widget: Any, logger: logging.Logger) -> logging.Logger:
+    """将已有记录器重绑为仅使用 GUI ``TextHandler``（先移除旧处理器）。
 
-    参数:
-        text_widget: tkinter的文本控件
-        logger_name: 日志记录器名称
+    :param text_widget: 可为 ``None``；非空则挂载 :class:`TextHandler`。
+    :param logger: 待装配的记录器实例。
+    :return: 与入参相同的记录器实例，便于链式赋值。
     """
-
     # 清除现有的处理器
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
