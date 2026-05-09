@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import logging
-from tkinter import messagebox
+from tkinter import TclError, messagebox
 
 from gui.app import MainApplication
 
@@ -16,24 +16,29 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    """启动 GUI。"""
+    """启动 GUI。
+
+    在根窗口上装配主界面并进入事件循环。图标文件缺失或无法加载时仅跳过图标设置。
+    其余启动期异常会记入日志并弹出错误对话框。
+    """
     try:
         import customtkinter as ctk
 
         root = ctk.CTk()
-        app = MainApplication(root)
+        MainApplication(root)
 
         # 设置窗口图标（如果有的话）
         try:
             root.iconbitmap("icon.ico")
-        except Exception:
+        except (OSError, TclError):
             pass
 
         root.mainloop()
     except Exception as e:
-        logger.error(f"应用程序错误: {e}", exc_info=True)
+        logger.error("应用程序错误: %s", e, exc_info=True)
         messagebox.showerror(
-            "应用程序错误", f"程序遇到错误:\n{str(e)}\n\n详细信息请查看日志文件"
+            "应用程序错误",
+            f"程序遇到错误:\n{e!s}\n\n详细信息请查看日志文件",
         )
 
 
