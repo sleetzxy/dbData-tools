@@ -1,10 +1,11 @@
-import os
-import tempfile
-import shutil
 import io
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
+from pytest import MonkeyPatch
 
 from core.exporter_csv import export_tables_to_csv
 from core.exporter_db import export_database_to_sql
@@ -15,19 +16,19 @@ from db.adapters.postgresql_adapter import PostgreSQLAdapter
 from db.connection import ConnectionHandle
 
 
-def _make_export_dir():
+def _make_export_dir() -> str:
     base_dir = os.path.join(os.path.dirname(__file__), ".tmp_exports")
     os.makedirs(base_dir, exist_ok=True)
     return tempfile.mkdtemp(dir=base_dir)
 
 
-def _make_import_dir():
+def _make_import_dir() -> str:
     base_dir = os.path.join(os.path.dirname(__file__), ".tmp_imports")
     os.makedirs(base_dir, exist_ok=True)
     return tempfile.mkdtemp(dir=base_dir)
 
 
-def test_postgresql_config_dispatches_to_postgresql_adapter():
+def test_postgresql_config_dispatches_to_postgresql_adapter() -> None:
     config = {
         "name": "pg",
         "db_type": "postgresql",
@@ -42,7 +43,7 @@ def test_postgresql_config_dispatches_to_postgresql_adapter():
     assert isinstance(adapter, PostgreSQLAdapter)
 
 
-def test_clickhouse_config_dispatches_to_clickhouse_adapter():
+def test_clickhouse_config_dispatches_to_clickhouse_adapter() -> None:
     config = {
         "name": "ch",
         "db_type": "clickhouse",
@@ -57,7 +58,9 @@ def test_clickhouse_config_dispatches_to_clickhouse_adapter():
     assert isinstance(adapter, ClickHouseAdapter)
 
 
-def test_export_tables_to_csv_dispatches_postgresql_adapter(monkeypatch):
+def test_export_tables_to_csv_dispatches_postgresql_adapter(
+    monkeypatch: MonkeyPatch,
+) -> None:
     called = {}
     export_dir = _make_export_dir()
 
@@ -117,7 +120,9 @@ def test_export_tables_to_csv_dispatches_postgresql_adapter(monkeypatch):
     assert result["success"] is True
 
 
-def test_export_tables_to_csv_dispatches_clickhouse_adapter(monkeypatch):
+def test_export_tables_to_csv_dispatches_clickhouse_adapter(
+    monkeypatch: MonkeyPatch,
+) -> None:
     called = {}
     export_dir = _make_export_dir()
 
@@ -178,7 +183,9 @@ def test_export_tables_to_csv_dispatches_clickhouse_adapter(monkeypatch):
     assert result["schema"] == ""
 
 
-def test_export_database_to_sql_dispatches_postgresql_adapter(monkeypatch):
+def test_export_database_to_sql_dispatches_postgresql_adapter(
+    monkeypatch: MonkeyPatch,
+) -> None:
     called = {}
 
     class DummyAdapter:
@@ -228,7 +235,9 @@ def test_export_database_to_sql_dispatches_postgresql_adapter(monkeypatch):
     assert result["schema"] == "public"
 
 
-def test_export_database_to_sql_dispatches_clickhouse_adapter_schema_empty(monkeypatch):
+def test_export_database_to_sql_dispatches_clickhouse_adapter_schema_empty(
+    monkeypatch: MonkeyPatch,
+) -> None:
     called = {}
 
     class DummyAdapter:
@@ -278,7 +287,9 @@ def test_export_database_to_sql_dispatches_clickhouse_adapter_schema_empty(monke
     assert result["schema"] == ""
 
 
-def test_export_tables_to_csv_clickhouse_failure_schema_is_empty(monkeypatch):
+def test_export_tables_to_csv_clickhouse_failure_schema_is_empty(
+    monkeypatch: MonkeyPatch,
+) -> None:
     def fake_create_connection(db_config, logger):
         return None
 
@@ -305,7 +316,9 @@ def test_export_tables_to_csv_clickhouse_failure_schema_is_empty(monkeypatch):
     assert result["schema"] == ""
 
 
-def test_export_tables_to_csv_clickhouse_exception_schema_is_empty(monkeypatch):
+def test_export_tables_to_csv_clickhouse_exception_schema_is_empty(
+    monkeypatch: MonkeyPatch,
+) -> None:
     class DummyAdapter:
         def export_csv(self, *args, **kwargs):
             raise RuntimeError("boom")
@@ -343,11 +356,13 @@ def test_export_tables_to_csv_clickhouse_exception_schema_is_empty(monkeypatch):
     assert "boom" in result["error"]
 
 
-def test_gui_csv_exporter_module_imports():
+def test_gui_csv_exporter_module_imports() -> None:
     __import__("gui.pages.csv.exporter")
 
 
-def test_export_tables_to_csv_clickhouse_outer_exception_schema_is_empty(monkeypatch):
+def test_export_tables_to_csv_clickhouse_outer_exception_schema_is_empty(
+    monkeypatch: MonkeyPatch,
+) -> None:
     def boom(db_config, logger):
         raise RuntimeError("boom")
 
@@ -375,7 +390,7 @@ def test_export_tables_to_csv_clickhouse_outer_exception_schema_is_empty(monkeyp
     assert "boom" in result["error"]
 
 
-def test_import_csv_dispatches_postgresql_adapter(monkeypatch):
+def test_import_csv_dispatches_postgresql_adapter(monkeypatch: MonkeyPatch) -> None:
     called = {}
     import_dir = _make_import_dir()
 
@@ -445,7 +460,9 @@ def test_import_csv_dispatches_postgresql_adapter(monkeypatch):
     assert result["schema"] == "public"
 
 
-def test_import_csv_dispatches_clickhouse_adapter_schema_empty(monkeypatch):
+def test_import_csv_dispatches_clickhouse_adapter_schema_empty(
+    monkeypatch: MonkeyPatch,
+) -> None:
     called = {}
     import_dir = _make_import_dir()
 
@@ -514,7 +531,7 @@ def test_import_csv_dispatches_clickhouse_adapter_schema_empty(monkeypatch):
     assert result["schema"] == ""
 
 
-def test_import_csv_result_passes_through_adapter(monkeypatch):
+def test_import_csv_result_passes_through_adapter(monkeypatch: MonkeyPatch) -> None:
     import_dir = _make_import_dir()
 
     class DummyAdapter:
@@ -580,7 +597,9 @@ def test_import_csv_result_passes_through_adapter(monkeypatch):
     assert result["schema"] == "public"
 
 
-def test_import_csv_sets_data_directory_and_passes_params(monkeypatch):
+def test_import_csv_sets_data_directory_and_passes_params(
+    monkeypatch: MonkeyPatch,
+) -> None:
     called = {}
     import_dir = _make_import_dir()
 
@@ -651,7 +670,9 @@ def test_import_csv_sets_data_directory_and_passes_params(monkeypatch):
     assert result["schema"] == "public"
 
 
-def test_clickhouse_import_invalid_table_does_not_abort(monkeypatch):
+def test_clickhouse_import_invalid_table_does_not_abort(
+    monkeypatch: MonkeyPatch,
+) -> None:
     adapter = ClickHouseAdapter()
 
     invalid_table = "   "
@@ -711,7 +732,9 @@ def test_clickhouse_import_invalid_table_does_not_abort(monkeypatch):
     assert result["schema"] == ""
 
 
-def test_import_csv_postgresql_blank_schema_defaults_public(monkeypatch):
+def test_import_csv_postgresql_blank_schema_defaults_public(
+    monkeypatch: MonkeyPatch,
+) -> None:
     called = {}
     import_dir = _make_import_dir()
 
@@ -801,7 +824,7 @@ class _DummyClientForPreSql:
         return _DummyCursorForPreSql(self.executed)
 
 
-def test_postgresql_pre_sql_handles_dollar_quotes():
+def test_postgresql_pre_sql_handles_dollar_quotes() -> None:
     adapter = PostgreSQLAdapter()
     client = _DummyClientForPreSql()
 
@@ -859,7 +882,9 @@ class _DummyClientForRollback:
         self.committed = True
 
 
-def test_postgresql_import_rollback_clears_imported_tables(monkeypatch):
+def test_postgresql_import_rollback_clears_imported_tables(
+    monkeypatch: MonkeyPatch,
+) -> None:
     adapter = PostgreSQLAdapter()
     client = _DummyClientForRollback(table_to_fail="table_b")
 
@@ -900,14 +925,16 @@ def test_postgresql_import_rollback_clears_imported_tables(monkeypatch):
     assert client.rolled_back is True
 
 
-def test_postgresql_import_uses_double_quote_escape():
+def test_postgresql_import_uses_double_quote_escape() -> None:
     from db.adapters import postgresql_adapter
 
     source = Path(postgresql_adapter.__file__).read_text(encoding="utf-8")
     assert r"ESCAPE '\"'" in source
 
 
-def test_read_sql_from_file_accepts_uppercase_extension(monkeypatch):
+def test_read_sql_from_file_accepts_uppercase_extension(
+    monkeypatch: MonkeyPatch,
+) -> None:
     sql_path = "PRE.SQL"
 
     class DummyTextFile(io.StringIO):
@@ -929,12 +956,12 @@ def test_read_sql_from_file_accepts_uppercase_extension(monkeypatch):
     assert read_sql_from_file(sql_path) == "SELECT 1;"
 
 
-def test_clickhouse_split_sql_statements_keeps_semicolons_inside_strings():
+def test_clickhouse_split_sql_statements_keeps_semicolons_inside_strings() -> None:
     statements = ClickHouseAdapter._split_sql_statements("SELECT ';';\nSELECT 2;")
     assert statements == ["SELECT ';'", "SELECT 2"]
 
 
-def test_clickhouse_export_sql_no_tables_returns_clean_error():
+def test_clickhouse_export_sql_no_tables_returns_clean_error() -> None:
     adapter = ClickHouseAdapter()
 
     class DummyResult:
@@ -969,7 +996,7 @@ def test_clickhouse_export_sql_no_tables_returns_clean_error():
     assert "No exportable tables found" == result["error"]
 
 
-def test_clickhouse_export_sql_orders_tables_and_ignores_schema():
+def test_clickhouse_export_sql_orders_tables_and_ignores_schema() -> None:
     adapter = ClickHouseAdapter()
 
     class DummyResult:
@@ -985,7 +1012,8 @@ def test_clickhouse_export_sql_orders_tables_and_ignores_schema():
                 return DummyResult(
                     [
                         (
-                            "CREATE TABLE `default`.`a_table` (`id` UInt32) ENGINE = MergeTree ORDER BY tuple()",
+                            "CREATE TABLE `default`.`a_table` (`id` UInt32) "
+                            "ENGINE = MergeTree ORDER BY tuple()",
                         )
                     ]
                 )
@@ -993,7 +1021,8 @@ def test_clickhouse_export_sql_orders_tables_and_ignores_schema():
                 return DummyResult(
                     [
                         (
-                            "CREATE TABLE `default`.`z_table` (`id` UInt32) ENGINE = MergeTree ORDER BY tuple()",
+                            "CREATE TABLE `default`.`z_table` (`id` UInt32) "
+                            "ENGINE = MergeTree ORDER BY tuple()",
                         )
                     ]
                 )
@@ -1038,7 +1067,7 @@ def test_clickhouse_export_sql_orders_tables_and_ignores_schema():
             Path(export_file).unlink(missing_ok=True)
 
 
-def test_pyinstaller_spec_includes_clickhouse_hidden_import():
+def test_pyinstaller_spec_includes_clickhouse_hidden_import() -> None:
     # PyInstaller 的 .spec 由首次打包生成，且在 .gitignore 中，
     # 干净 checkout 不一定存在；存在时才检查必备的隐式导入项。
     spec_files = list(Path(".").glob("*.spec"))
@@ -1048,7 +1077,9 @@ def test_pyinstaller_spec_includes_clickhouse_hidden_import():
     assert "clickhouse_connect" in spec_source
 
 
-def test_clickhouse_import_creates_csv_backup_before_import(monkeypatch):
+def test_clickhouse_import_creates_csv_backup_before_import(
+    monkeypatch: MonkeyPatch,
+) -> None:
     adapter = ClickHouseAdapter()
 
     class DummyBinaryFile(io.BytesIO):
@@ -1126,7 +1157,9 @@ def test_clickhouse_import_creates_csv_backup_before_import(monkeypatch):
     assert any(data == b"id\n2\n" for _, data in client.commands if data is not None)
 
 
-def test_clickhouse_import_backup_failure_stops_import(monkeypatch):
+def test_clickhouse_import_backup_failure_stops_import(
+    monkeypatch: MonkeyPatch,
+) -> None:
     adapter = ClickHouseAdapter()
 
     monkeypatch.setattr(
@@ -1173,7 +1206,7 @@ def test_clickhouse_import_backup_failure_stops_import(monkeypatch):
     assert result["imported_tables"] == []
 
 
-def test_postgresql_import_csv_truncate_before_false_skips_truncate():
+def test_postgresql_import_csv_truncate_before_false_skips_truncate() -> None:
     """truncate_before=False 时不应执行 TRUNCATE，验证参数被接受不报错"""
     from db.adapters.postgresql_adapter import PostgreSQLAdapter
 
@@ -1210,7 +1243,9 @@ def test_postgresql_import_csv_truncate_before_false_skips_truncate():
         def rollback(self):
             pass
 
-    import tempfile, os, shutil
+    import os
+    import shutil
+    import tempfile
 
     tmp = tempfile.mkdtemp()
     try:
@@ -1234,7 +1269,7 @@ def test_postgresql_import_csv_truncate_before_false_skips_truncate():
         shutil.rmtree(tmp)
 
 
-def test_clickhouse_import_csv_truncate_before_false_skips_truncate():
+def test_clickhouse_import_csv_truncate_before_false_skips_truncate() -> None:
     """ClickHouse truncate_before=False 时不执行 TRUNCATE"""
     from db.adapters.clickhouse_adapter import ClickHouseAdapter
 
@@ -1246,7 +1281,9 @@ def test_clickhouse_import_csv_truncate_before_false_skips_truncate():
         def command(self, sql, data=None):
             commands_called.append(sql)
 
-    import tempfile, os, shutil
+    import os
+    import shutil
+    import tempfile
 
     tmp = tempfile.mkdtemp()
     try:
