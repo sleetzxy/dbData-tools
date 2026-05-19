@@ -197,21 +197,15 @@ class MigrationOrchestrator:
         last_error = ""
 
         completed_set = meta.completed_chunks.get(cond.table_name, set())
-        # 同步本地计数
-        for ck in completed_set:
-            if ck < total_chunks:
-                completed_chunks_count += 1
 
         for chunk in chunks:
             chunk_index = chunk.chunk_index
 
-            # 续传模式：跳过已完成分块
+            # 续传模式：跳过已完成分块（已计入 caller 的 completed_across）
             if resume_mode and chunk_index in completed_set:
                 self.logger.info(
                     "跳过已完成分块: %s[%d]", cond.table_name, chunk_index,
                 )
-                completed_chunks_count += 1
-                completed_across += 1
                 continue
 
             # 重试循环（导出 + 导入作为一个原子单元）
@@ -273,7 +267,9 @@ class MigrationOrchestrator:
                     chunk_index=chunk_index,
                     total_table_chunks=total_chunks,
                     total_across_all_tables=total_across_all,
-                    completed_across_all_tables=completed_across,
+                    completed_across_all_tables=(
+                        completed_across + completed_chunks_count
+                    ),
                     rows=rows_in_chunk,
                 )
                 try:
@@ -341,9 +337,13 @@ class MigrationOrchestrator:
         )
 
         if not result.get("success"):
-            error_msg = result.get("error", "未知导出错误")
-            if not error_msg and result.get("error_tables"):
-                error_msg = result["error_tables"][0].get("error", "未知导出错误")
+            error_msg = result.get("error") or ""
+            if not error_msg:
+                tables_with_error = result.get("error_tables") or []
+                if tables_with_error:
+                    error_msg = tables_with_error[0].get("error", "")
+            if not error_msg:
+                error_msg = "未知导出错误"
             raise RuntimeError(f"导出分块失败: {error_msg}")
 
         csv_path = os.path.join(chunk_dir, f"{cond.table_name}.csv")
@@ -381,9 +381,13 @@ class MigrationOrchestrator:
         )
 
         if not result.get("success"):
-            error_msg = result.get("error", "未知导入错误")
-            if not error_msg and result.get("error_tables"):
-                error_msg = result["error_tables"][0].get("error", "未知导入错误")
+            error_msg = result.get("error") or ""
+            if not error_msg:
+                tables_with_error = result.get("error_tables") or []
+                if tables_with_error:
+                    error_msg = tables_with_error[0].get("error", "")
+            if not error_msg:
+                error_msg = "未知导入错误"
             raise RuntimeError(f"导入分块失败: {error_msg}")
 
     # ------------------------------------------------------------------
