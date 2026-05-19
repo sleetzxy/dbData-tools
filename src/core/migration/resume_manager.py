@@ -7,7 +7,7 @@ import glob
 import json
 import logging
 import os
-from datetime import datetime, timezone
+import re
 from typing import Any
 
 from core.migration.models import (
@@ -18,6 +18,14 @@ from core.migration.models import (
 logger = logging.getLogger("migrate.resume")
 
 _RESUME_SUBDIR = ".db_migrator_resume"
+_MIGRATION_ID_RE = re.compile(r"^[a-zA-Z0-9_.-]+$")
+
+
+def _validate_migration_id(migration_id: str) -> str:
+    """验证 migration_id 只包含安全字符，防止路径遍历。"""
+    if not migration_id or not _MIGRATION_ID_RE.match(migration_id):
+        raise ValueError(f"不安全的 migration_id: {migration_id!r}")
+    return migration_id
 
 
 def _meta_to_dict(meta: MigrationMeta) -> dict[str, Any]:
@@ -59,6 +67,7 @@ class ResumeManager:
         )
 
     def _file_path(self, migration_id: str) -> str:
+        _validate_migration_id(migration_id)
         return os.path.join(self.resume_dir, f"{migration_id}.json")
 
     def save(self, meta: MigrationMeta) -> str:
@@ -77,13 +86,13 @@ class ResumeManager:
         if not os.path.isfile(path):
             return None
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             meta = _dict_to_meta(data)
             logger.info("断点已加载: %s", path)
             return meta
-        except Exception:
-            logger.warning("断点文件损坏，跳过: %s", path)
+        except (json.JSONDecodeError, KeyError, TypeError, OSError) as exc:
+            logger.warning("断点文件损坏，跳过: %s, 错误: %s", path, exc)
             return None
 
     def delete(self, migration_id: str) -> None:
