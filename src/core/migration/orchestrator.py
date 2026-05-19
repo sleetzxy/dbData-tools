@@ -53,6 +53,8 @@ class MigrationOrchestrator:
         resume_from: str | None = None,
         logger: Any | None = None,
         progress_callback: Callable[[ChunkProgress], None] | None = None,
+        src_adapter: Any = None,
+        dst_adapter: Any = None,
     ) -> None:
         self.src_config = src_config
         self.dst_config = dst_config
@@ -62,8 +64,8 @@ class MigrationOrchestrator:
         self.logger = logger or logging.getLogger("migrate.orchestrator")
         self.progress_callback = progress_callback
 
-        self.src_adapter = get_adapter_for_config(src_config)
-        self.dst_adapter = get_adapter_for_config(dst_config)
+        self.src_adapter = src_adapter or get_adapter_for_config(src_config)
+        self.dst_adapter = dst_adapter or get_adapter_for_config(dst_config)
         self.resume_mgr = ResumeManager()
 
         # 解析 schema：PG 默认 "public"，CH 用配置中的 schema 或空串
