@@ -10,6 +10,7 @@ from core.migration.models import (
     MigrationMeta,
     TableMigrationResult,
 )
+from core.migration.orchestrator import MigrationOrchestrator
 from core.migration.resume_manager import ResumeManager
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "ChunkSpec",
     "MigrationCondition",
     "MigrationMeta",
+    "MigrationOrchestrator",
     "ResumeManager",
     "TableMigrationResult",
     "compute_chunks",
