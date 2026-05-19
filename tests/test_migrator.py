@@ -22,6 +22,11 @@ def _make_mock_adapter(
             export_dir: str,
             schema: str = "",
             include_header: bool = True,
+            where_clause: str = "",
+            custom_sql: str = "",
+            chunk_key: str = "",
+            chunk_start: Any = None,
+            chunk_end: Any = None,
             logger: Any = None,
         ) -> dict[str, Any]:
             result: dict[str, Any] = {
@@ -58,6 +63,7 @@ def _make_mock_adapter(
             pre_sql_file: str = "",
             need_backup: bool = False,
             truncate_before: bool = True,
+            is_first_chunk: bool = False,
             logger: Any = None,
         ) -> dict[str, Any]:
             result: dict[str, Any] = {
@@ -155,6 +161,11 @@ def test_migrate_tables_truncate_before_false_passes_param() -> None:
             export_dir: str,
             schema: str = "",
             include_header: bool = True,
+            where_clause: str = "",
+            custom_sql: str = "",
+            chunk_key: str = "",
+            chunk_start: Any = None,
+            chunk_end: Any = None,
             logger: Any = None,
         ) -> dict[str, Any]:
             with open(
@@ -178,6 +189,7 @@ def test_migrate_tables_truncate_before_false_passes_param() -> None:
             pre_sql_file: str = "",
             need_backup: bool = False,
             truncate_before: bool = True,
+            is_first_chunk: bool = False,
             logger: Any = None,
         ) -> dict[str, Any]:
             truncate_calls.append(truncate_before)

@@ -114,6 +114,7 @@ def migrate_tables(
                     data_dir=table_tmp_dir,
                     schema=dst_schema,
                     truncate_before=truncate_before,
+                    is_first_chunk=True,
                     logger=logger,
                 )
                 if not import_result.get("success", True):
