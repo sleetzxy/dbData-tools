@@ -60,7 +60,7 @@ feat(auth): add jwt refresh token flow
 
 AI-Assisted-by: Cursor
 Prompt-ID: PROMPT-AUTH-003
-Co-authored-by: Zhang San <zhangsan@company.com>
+Co-authored-by: Zhang San <zhangsan@company.com>  <!-- 真实提交人，非 AI -->
 ```
 
 约定：

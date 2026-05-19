@@ -51,7 +51,7 @@ docs: 重写仓库协作说明
 
 ```
 AI-Assisted-by: Claude Code
-Co-authored-by: 提交人姓名 <email>
+Co-authored-by: 提交人姓名 <email>  <!-- 真实提交人，非 AI -->
 ```
 
 若 AI 仅参与 commit message 润色，未参与代码：Body 末行写 `AI used only for commit message wording.`
