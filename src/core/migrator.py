@@ -30,6 +30,7 @@ def migrate_tables(
     src_adapter: Any | None = None,
     dst_adapter: Any | None = None,
     logger: Any | None = None,
+    conditions: list[Any] | None = None,
 ) -> dict[str, Any]:
     """
     将源库中指定的多张表迁移到目标库。
@@ -40,11 +41,12 @@ def migrate_tables(
     Args:
         src_config: 源库连接配置（含 db_type）
         dst_config: 目标库连接配置（含 db_type）
-        table_names: 要迁移的表名列表
+        table_names: 要迁移的表名列表（向后兼容）
         truncate_before: 迁移前是否清空目标表
         src_adapter: 测试用注入，生产时自动从 db_type 获取
         dst_adapter: 测试用注入，生产时自动从 db_type 获取
         logger: 日志记录器
+        conditions: 可选的 MigrationCondition 列表（含 WHERE/SQL/分块配置）
 
     Returns:
         {
@@ -57,7 +59,7 @@ def migrate_tables(
     _log = logger or logging.getLogger(__name__)
 
     table_names = [t.strip() for t in table_names if t.strip()]
-    if not table_names:
+    if not table_names and not conditions:
         return {
             "success": False,
             "error": "未指定要迁移的表名",
@@ -79,10 +81,11 @@ def migrate_tables(
         )
 
     # 生产模式：委托给 MigrationOrchestrator（分块 + 断点 + 重试）
-    conditions = [
-        MigrationCondition(table_name=name, mode="where", enabled=True)
-        for name in table_names
-    ]
+    if conditions is None:
+        conditions = [
+            MigrationCondition(table_name=name, mode="where", enabled=True)
+            for name in table_names
+        ]
 
     orchestrator = MigrationOrchestrator(
         src_config=src_config,
