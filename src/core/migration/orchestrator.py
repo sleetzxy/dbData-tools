@@ -142,7 +142,7 @@ class MigrationOrchestrator:
                 )
                 results.append(table_result)
                 total_rows += table_result.total_rows
-                completed_across += table_result.total_chunks
+                completed_across += table_result.completed_chunks
 
             # 全部完成 → 清理断点；部分失败 → 保存当前进度
             if all(r.success for r in results):
@@ -458,10 +458,14 @@ class MigrationOrchestrator:
         results: list[TableMigrationResult],
         total_rows: int,
     ) -> dict[str, Any]:
-        """将结果列表组装为兼容的返回字典。"""
-        migrated = [r.table_name for r in results if r.success]
+        """将结果列表组装为兼容 migrate_tables() 的返回字典。"""
+        migrated: list[dict[str, Any]] = [
+            {"name": r.table_name, "rows": r.total_rows}
+            for r in results
+            if r.success
+        ]
         errors: list[dict[str, str]] = [
-            {"table": r.table_name, "error": r.error}
+            {"name": r.table_name, "error": r.error}
             for r in results
             if not r.success
         ]
