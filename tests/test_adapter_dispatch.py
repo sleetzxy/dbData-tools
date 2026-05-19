@@ -78,7 +78,7 @@ def test_export_tables_to_csv_dispatches_postgresql_adapter(
         self,
         client,
         db_config,
-        tables,
+        table,
         export_dir,
         schema="public",
         include_header=True,
@@ -87,7 +87,9 @@ def test_export_tables_to_csv_dispatches_postgresql_adapter(
         called["adapter"] = "postgresql"
         return {
             "success": True,
-            "exported_tables": [],
+            "exported_tables": [
+                {"schema": schema, "name": table, "rows": 0, "file": ""},
+            ],
             "error_tables": [],
             "total_rows": 0,
             "schema": schema,
@@ -140,7 +142,7 @@ def test_export_tables_to_csv_dispatches_clickhouse_adapter(
         self,
         client,
         db_config,
-        tables,
+        table,
         export_dir,
         schema="",
         include_header=True,
@@ -149,7 +151,9 @@ def test_export_tables_to_csv_dispatches_clickhouse_adapter(
         called["adapter"] = "clickhouse"
         return {
             "success": True,
-            "exported_tables": [],
+            "exported_tables": [
+                {"schema": schema, "name": table, "rows": 0, "file": ""},
+            ],
             "error_tables": [],
             "total_rows": 0,
             "schema": schema,

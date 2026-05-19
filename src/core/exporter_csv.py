@@ -50,27 +50,37 @@ def export_tables_to_csv(
         if conn.db_type == "clickhouse":
             effective_schema = ""
 
-        try:
-            return conn.adapter.export_csv(
-                client=conn.client,
-                db_config=db_config,
-                tables=tables,
-                export_dir=export_dir,
-                schema=effective_schema,
-                include_header=include_header,
-                logger=logger,
-            )
-        except Exception as exc:
-            error_msg = f"导出过程中发生错误: {str(exc)}"
-            logger.error(error_msg)
-            return {
-                "success": False,
-                "exported_tables": [],
-                "error_tables": [],
-                "total_rows": 0,
-                "schema": effective_schema,
-                "error": error_msg,
-            }
+        overall: dict[str, Any] = {
+            "success": True,
+            "exported_tables": [],
+            "error_tables": [],
+            "total_rows": 0,
+            "schema": effective_schema,
+        }
+        for tbl in tables:
+            try:
+                r = conn.adapter.export_csv(
+                    client=conn.client,
+                    db_config=db_config,
+                    table=tbl,
+                    export_dir=export_dir,
+                    schema=effective_schema,
+                    include_header=include_header,
+                    logger=logger,
+                )
+                if not r.get("success", True):
+                    overall["success"] = False
+                    err = r.get("error")
+                    if err:
+                        overall["error"] = err
+                overall["exported_tables"].extend(r.get("exported_tables", []))
+                overall["error_tables"].extend(r.get("error_tables", []))
+                overall["total_rows"] += r.get("total_rows", 0)
+            except Exception as exc:
+                overall["success"] = False
+                overall["error_tables"].append({"table": tbl, "error": str(exc)})
+                overall["error"] = str(exc)
+        return overall
     except Exception as exc:
         error_msg = f"导出过程中发生错误: {str(exc)}"
         logger.error(error_msg)

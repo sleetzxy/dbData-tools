@@ -103,17 +103,118 @@ class ClickHouseAdapter:
 
         return backup_path
 
+    @staticmethod
+    def _format_chunk_value(value: Any) -> str:
+        """Format a chunk bound value as a SQL literal for inline use.
+
+        :param value: Integer, string, datetime, or ``None``.
+        :returns: SQL-safe literal string.
+        """
+        if value is None:
+            return "NULL"
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, str):
+            escaped = value.replace("'", "''")
+            return f"'{escaped}'"
+        if isinstance(value, datetime):
+            return f"'{value.isoformat()}'"
+        escaped = str(value).replace("'", "''")
+        return f"'{escaped}'"
+
+    def _build_chunked_query(
+        self,
+        table: str,
+        schema: str,
+        where_clause: str = "",
+        custom_sql: str = "",
+        chunk_key: str = "",
+        chunk_start: Any = None,
+        chunk_end: Any = None,
+    ) -> str:
+        """Build a SELECT SQL string for chunked/conditional ClickHouse export.
+
+        SQL construction priority:
+
+        1. ``custom_sql`` + chunk: wrap custom SQL as subquery, add chunk range
+        2. ``where_clause`` + chunk:
+           ``SELECT * FROM db.t WHERE key>=s AND key<e AND cond``
+        3. chunk only: ``SELECT * FROM db.t WHERE key>=s AND key<e``
+        4. neither: full table ``SELECT * FROM db.t``
+
+        :returns: SELECT query string (without ``FORMAT`` clause).
+        """
+        has_chunk = bool(chunk_key) and (
+            chunk_start is not None or chunk_end is not None
+        )
+        database = schema if schema else ""
+
+        # Priority 1: custom_sql
+        if custom_sql:
+            query = f"SELECT * FROM ({custom_sql}) AS _sub"
+            if has_chunk:
+                conditions = []
+                if chunk_start is not None:
+                    conditions.append(
+                        f"{self._quote_identifier(chunk_key)}"
+                        f" >= {self._format_chunk_value(chunk_start)}"
+                    )
+                if chunk_end is not None:
+                    conditions.append(
+                        f"{self._quote_identifier(chunk_key)}"
+                        f" < {self._format_chunk_value(chunk_end)}"
+                    )
+                query = f"{query} WHERE {' AND '.join(conditions)}"
+                query = f"{query} ORDER BY {self._quote_identifier(chunk_key)}"
+            return query
+
+        # Base: SELECT * FROM database.table
+        qualified = self._qualified_table(database, table)
+        query = f"SELECT * FROM {qualified}"
+
+        conditions: list[str] = []
+
+        # Chunk conditions (Priorities 2 & 3)
+        if has_chunk:
+            if chunk_start is not None:
+                conditions.append(
+                    f"{self._quote_identifier(chunk_key)}"
+                    f" >= {self._format_chunk_value(chunk_start)}"
+                )
+            if chunk_end is not None:
+                conditions.append(
+                    f"{self._quote_identifier(chunk_key)}"
+                    f" < {self._format_chunk_value(chunk_end)}"
+                )
+
+        # WHERE clause (Priority 2)
+        if where_clause:
+            conditions.append(f"({where_clause})")
+
+        if conditions:
+            query = f"{query} WHERE {' AND '.join(conditions)}"
+
+        if has_chunk:
+            query = f"{query} ORDER BY {self._quote_identifier(chunk_key)}"
+
+        return query
+
     def export_csv(
         self,
         client: Any,
         db_config: dict[str, Any],
-        tables: list[str],
+        table: str,
         export_dir: str,
         schema: str = "",
         include_header: bool = True,
+        where_clause: str = "",
+        custom_sql: str = "",
+        chunk_key: str = "",
+        chunk_start: Any = None,
+        chunk_end: Any = None,
         logger: Any | None = None,
     ) -> dict[str, Any]:
-        """Stream tables to CSV files using ``raw_stream`` / ``raw_query``."""
+        """Stream a single table to a CSV file using ``raw_stream`` / ``raw_query``."""
         database = self._validate_identifier(
             str(db_config.get("database", "")).strip(), "database"
         )
@@ -127,79 +228,90 @@ class ClickHouseAdapter:
 
         os.makedirs(export_dir, exist_ok=True)
 
-        for table in tables:
-            try:
-                table_name = self._validate_identifier(str(table).strip(), "table")
-                output_file = os.path.join(export_dir, f"{table_name}.csv")
-                if logger:
-                    logger.info(
-                        f"Exporting table {database}.{table_name} -> {output_file}"
-                    )
+        try:
+            table_name = self._validate_identifier(str(table).strip(), "table")
+            output_file = os.path.join(export_dir, f"{table_name}.csv")
+            if logger:
+                logger.info(
+                    f"Exporting table {database}.{table_name} -> {output_file}"
+                )
 
-                format_name = "CSVWithNames" if include_header else "CSV"
-                qualified = self._qualified_table(database, table_name)
-                query = f"SELECT * FROM {qualified} FORMAT {format_name}"
+            select_query = self._build_chunked_query(
+                table=table_name,
+                schema=database,
+                where_clause=where_clause,
+                custom_sql=custom_sql,
+                chunk_key=chunk_key,
+                chunk_start=chunk_start,
+                chunk_end=chunk_end,
+            )
 
-                if hasattr(client, "raw_stream"):
-                    stream = client.raw_stream(query)
-                    try:
-                        with open(output_file, "wb") as f:
-                            while True:
-                                chunk = stream.read(1024 * 1024)
-                                if not chunk:
-                                    break
-                                f.write(chunk)
-                    finally:
-                        if hasattr(stream, "close"):
-                            stream.close()
+            format_name = "CSVWithNames" if include_header else "CSV"
+            query = f"{select_query} FORMAT {format_name}"
+
+            if hasattr(client, "raw_stream"):
+                stream = client.raw_stream(query)
+                try:
+                    with open(output_file, "wb") as f:
+                        while True:
+                            chunk = stream.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                finally:
+                    if hasattr(stream, "close"):
+                        stream.close()
+            else:
+                response = client.raw_query(query)
+                if isinstance(response, bytes):
+                    csv_text = response.decode("utf-8")
                 else:
-                    response = client.raw_query(query)
-                    if isinstance(response, bytes):
-                        csv_text = response.decode("utf-8")
-                    else:
-                        csv_text = str(response)
-                    with open(output_file, "w", encoding="utf-8") as f:
-                        f.write(csv_text)
+                    csv_text = str(response)
+                with open(output_file, "w", encoding="utf-8") as f:
+                    f.write(csv_text)
 
-                row_count = 0
-                if hasattr(client, "query"):
-                    count_result = client.query(f"SELECT count() FROM {qualified}")
-                    if hasattr(count_result, "result_rows"):
-                        row_count = count_result.result_rows[0][0]
-                    elif hasattr(count_result, "result_set"):
-                        row_count = count_result.result_set[0][0]
-                    else:
-                        row_count = int(str(count_result).strip())
-
-                result["total_rows"] += row_count
-                result["exported_tables"].append(
-                    {
-                        "schema": "",
-                        "name": table_name,
-                        "rows": row_count,
-                        "file": output_file,
-                    }
+            row_count = 0
+            if hasattr(client, "query"):
+                count_query = (
+                    f"SELECT count() FROM ({select_query}) AS _cnt"
                 )
+                count_result = client.query(count_query)
+                if hasattr(count_result, "result_rows"):
+                    row_count = count_result.result_rows[0][0]
+                elif hasattr(count_result, "result_set"):
+                    row_count = count_result.result_set[0][0]
+                else:
+                    row_count = int(str(count_result).strip())
 
-                if logger:
-                    logger.info(
-                        "Export finished for %s.%s, rows: %s",
-                        database,
-                        table_name,
-                        row_count,
-                    )
-            except Exception as exc:
-                error_msg = f"Export failed for {database}.{table}: {exc}"
-                if logger:
-                    logger.error(error_msg)
-                result["error_tables"].append(
-                    {
-                        "schema": "",
-                        "name": table,
-                        "error": str(exc),
-                    }
+            result["total_rows"] += row_count
+            result["exported_tables"].append(
+                {
+                    "schema": "",
+                    "name": table_name,
+                    "rows": row_count,
+                    "file": output_file,
+                }
+            )
+
+            if logger:
+                logger.info(
+                    "Export finished for %s.%s, rows: %s",
+                    database,
+                    table_name,
+                    row_count,
                 )
-                result["success"] = False
+        except Exception as exc:
+            error_msg = f"Export failed for {database}.{table}: {exc}"
+            if logger:
+                logger.error(error_msg)
+            result["error_tables"].append(
+                {
+                    "schema": "",
+                    "name": table,
+                    "error": str(exc),
+                }
+            )
+            result["success"] = False
 
         return result
 
@@ -213,9 +325,16 @@ class ClickHouseAdapter:
         pre_sql_file: str = "",
         need_backup: bool = False,
         truncate_before: bool = True,
+        is_first_chunk: bool = False,
         logger: Any | None = None,
     ) -> dict[str, Any]:
-        """Load CSV files via ``INSERT ... FORMAT CSVWithNames``."""
+        """Load CSV files via ``INSERT ... FORMAT CSVWithNames``.
+
+        :param is_first_chunk: When ``True`` and ``truncate_before`` is also
+            ``True``, truncate the target table before importing (first chunk
+            of a migration). When ``False`` (default), skip truncation even if
+            ``truncate_before`` is set, so subsequent chunks can append data.
+        """
         database = self._validate_identifier(
             str(db_config.get("database", "")).strip(), "database"
         )
@@ -281,7 +400,7 @@ class ClickHouseAdapter:
                     )
                     logger.info(msg)
                 if hasattr(client, "command"):
-                    if truncate_before:
+                    if truncate_before and is_first_chunk:
                         client.command(f"TRUNCATE TABLE {qualified}")
                     with open(csv_file, "rb") as f:
                         data = f.read()

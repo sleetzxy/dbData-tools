@@ -91,7 +91,7 @@ def migrate_tables(
                 export_result = src_adapter.export_csv(
                     client=src_client,
                     db_config=src_config,
-                    tables=[table],
+                    table=table,
                     export_dir=table_tmp_dir,
                     schema=src_schema,
                     include_header=True,
