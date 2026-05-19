@@ -32,6 +32,32 @@ class ChunkSpec:
     key_end: Any                             # 切分键结束值（None 表示无上界）
 ```
 
+### TableMigrationResult — 单表迁移结果
+
+```python
+@dataclass
+class TableMigrationResult:
+    table_name: str
+    success: bool
+    total_rows: int
+    total_chunks: int
+    completed_chunks: int
+    error: str = ""
+```
+
+### ChunkProgress — 进度回调数据
+
+```python
+@dataclass
+class ChunkProgress:
+    table_name: str
+    chunk_index: int
+    total_table_chunks: int
+    total_across_all_tables: int
+    completed_across_all_tables: int
+    rows: int
+```
+
 ### MigrationMeta — 迁移元数据（断点文件持久化）
 
 ```python
@@ -60,7 +86,7 @@ class MigrationMeta:
 
 - **整型键**：`SELECT MIN(k), MAX(k)` 获取范围 → 等间距分块 `WHERE k >= start AND k < end`
 - **时间戳键**：`SELECT MIN(k), MAX(k)` 获取范围 → 按时间区间分片，每片用 LIMIT chunk_size 确认末端精确值（避免数据密度不均）
-- **UUID/字符串键**：`MIN/MAX` 获取范围 → 按排序后 LIMIT/OFFSET 分块
+- **UUID/字符串键**：`MIN/MAX` 获取范围 → 使用 keyset pagination（`WHERE k > last_seen ORDER BY k LIMIT n`），避免 OFFSET 在大数据量下性能退化
 
 ### SQL 生成
 
@@ -106,6 +132,9 @@ src/core/
     __init__.py
     models.py                 MigrationCondition, ChunkSpec, MigrationMeta
     chunk_strategy.py         切分键检测、范围探测、分块列表计算
+                                compute_chunks(adapter, client, table, cond) → list[ChunkSpec]
+                                detect_chunk_key(adapter, client, table) → str
+                                probe_range(adapter, client, table, chunk_key) → (min_val, max_val)
     orchestrator.py           分块循环、重试、断点、恢复
     resume_manager.py         断点文件读写
 ```
@@ -115,26 +144,31 @@ src/core/
 ```python
 class MigrationOrchestrator:
     def __init__(self, src_config, dst_config, conditions, truncate_before=True,
-                 resume_from=None, logger=None): ...
+                 resume_from=None, logger=None,
+                 progress_callback: Callable[[ChunkProgress], None] | None = None): ...
 
     def run(self) -> dict:
         """与现有 migrate_tables() 返回格式兼容"""
 
-    def _migrate_table(self, cond: MigrationCondition) -> TableResult:
+    def _migrate_table(self, cond: MigrationCondition) -> TableMigrationResult:
         """单表迁移：
-        1. compute_chunks() → [ChunkSpec]
+        1. chunk_strategy.compute_chunks(adapter, client, cond) → [ChunkSpec]
         2. for chunk in chunks:
              - 断点文件已有 → skip
              - export_chunk(chunk) → CSV
-             - import_chunk(chunk, CSV)
-             - 成功 → mark chunk done → write checkpoint
+             - import_chunk(chunk, CSV, is_first_chunk=is_first_chunk_of_this_migration)
+             - 成功 → mark chunk done → write checkpoint → progress_callback
              - 失败 → retry(max 3) → if still fail, mark failed, continue
-        3. cleanup CSV temp dir
+        3. per-run temp dir cleanup 由 run() 统一管理
         """
 
     def _export_chunk(self, adapter, client, table, chunk) -> str: ...
 
     def _import_chunk(self, adapter, client, table, csv_path, is_first_chunk) -> None: ...
+
+    def _resolve_truncate(self, resume_from: str | None, is_first_chunk: bool) -> bool:
+        """首次全新迁移且 truncate_before=True 且是首 chunk → truncate；
+        从断点恢复 → 永不 truncate（中间 chunks 不复 truncate）"""
 ```
 
 ### 向后兼容
