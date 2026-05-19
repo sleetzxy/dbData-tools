@@ -1,3 +1,8 @@
+from core.migration.chunk_strategy import (
+    compute_chunks,
+    detect_chunk_key,
+    probe_range,
+)
 from core.migration.models import (
     ChunkProgress,
     ChunkSpec,
@@ -14,4 +19,7 @@ __all__ = [
     "MigrationMeta",
     "ResumeManager",
     "TableMigrationResult",
+    "compute_chunks",
+    "detect_chunk_key",
+    "probe_range",
 ]
