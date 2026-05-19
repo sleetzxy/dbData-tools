@@ -264,17 +264,19 @@ class MigratorPage(BaseToolPage):
     CONFIG_FILE = "~/.db_migrator_config.json"
 
     def __init__(self, root):
+        # 先初始化 setup_left_panel_content 中引用的属性
+        self._table_cards: list[_TableCard] = []
+        self._running = False
+        self._paused = False
+        self._progress_var = tk.DoubleVar(value=0.0)
+        self._progress_label_var = tk.StringVar(value="")
+
         super().__init__(
             root=root,
             config_file=self.CONFIG_FILE,
             log_title="📋 迁移日志",
             core_logger=core_logger,
         )
-        self._table_cards: list[_TableCard] = []
-        self._running = False
-        self._paused = False
-        self._progress_var = tk.DoubleVar(value=0.0)
-        self._progress_label_var = tk.StringVar(value="")
 
     # ------------------------------------------------------------------
     # 左侧面板
