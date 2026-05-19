@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from core.migration.models import ChunkSpec, MigrationCondition
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +228,7 @@ def _extract_ch_rows(result: Any) -> list[tuple]:
         return list(result.result_set)
     if isinstance(result, (list, tuple)):
         return list(result)
+    logger.warning("无法识别的 ClickHouse 查询结果类型: %s", type(result))
     return []
 
 
@@ -289,8 +293,11 @@ def _compute_int_chunks(
 
     :param min_val: 最小值（含）。
     :param max_val: 最大值（含）。
-    :param chunk_size: 每分块期望包含的取值个数。
+    :param chunk_size: 每分块期望包含的取值个数（必须 > 0）。
+    :raises ValueError: chunk_size <= 0 时抛出。
     """
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size 必须为正数，实际为 {chunk_size}")
     span = max_val - min_val + 1
     num_chunks = max(1, math.ceil(span / chunk_size))
     actual_size = math.ceil(span / num_chunks)
@@ -318,24 +325,30 @@ def _compute_datetime_chunks(
 
     :param min_val: 最小值（含）。
     :param max_val: 最大值（含）。
-    :param chunk_size: 每分块期望覆盖的秒数。
+    :param chunk_size: 每分块期望覆盖的秒数（必须 > 0）。
+    :raises ValueError: chunk_size <= 0 时抛出。
     """
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size 必须为正数，实际为 {chunk_size}")
+
     min_ts = min_val.timestamp()
     max_ts = max_val.timestamp()
     total_seconds = max_ts - min_ts
 
     if total_seconds <= 0:
-        return [ChunkSpec(chunk_index=0, key_start=min_val, key_end=min_val)]
+        return [ChunkSpec(chunk_index=0, key_start=min_val, key_end=None)]
 
     num_chunks = max(1, math.ceil(total_seconds / chunk_size))
     seconds_per_chunk = total_seconds / num_chunks
 
     chunks: list[ChunkSpec] = []
     for i in range(num_chunks):
-        start = datetime.fromtimestamp(min_ts + i * seconds_per_chunk)
+        start = datetime.fromtimestamp(
+            min_ts + i * seconds_per_chunk, tz=timezone.utc
+        )
         if i < num_chunks - 1:
             end = datetime.fromtimestamp(
-                min_ts + (i + 1) * seconds_per_chunk,
+                min_ts + (i + 1) * seconds_per_chunk, tz=timezone.utc
             )
         else:
             end = None  # 无上界，编排器自行处理
