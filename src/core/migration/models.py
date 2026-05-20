@@ -18,6 +18,7 @@ class MigrationCondition:
 
     table_name: str
     mode: Literal["where", "sql"]
+    # 空字符串表示目标表名与源表相同
     target_table: str = ""
     where_clause: str = ""
     custom_sql: str = ""

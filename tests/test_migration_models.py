@@ -8,6 +8,7 @@ from core.migration.models import (
     MigrationCondition,
     MigrationMeta,
     TableMigrationResult,
+    TransferMode,
 )
 
 
@@ -19,6 +20,7 @@ def test_migration_condition_defaults() -> None:
     assert cond.where_clause == ""
     assert cond.custom_sql == ""
     assert cond.chunk_key == ""
+    assert cond.target_table == ""
     assert cond.chunk_size == 100_000
     assert cond.enabled is True
 
@@ -119,6 +121,16 @@ def test_migration_meta_default_factory() -> None:
     assert meta.tables == []
     assert meta.completed_chunks == {}
     assert meta.created_at == ""
+
+
+def test_transfer_mode_csv() -> None:
+    """TransferMode.CSV has value 'csv'."""
+    assert TransferMode.CSV.value == "csv"
+
+
+def test_transfer_mode_stream() -> None:
+    """TransferMode.STREAM has value 'stream'."""
+    assert TransferMode.STREAM.value == "stream"
 
 
 def test_migration_meta_with_completed_chunks() -> None:

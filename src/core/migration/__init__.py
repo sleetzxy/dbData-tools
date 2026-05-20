@@ -9,6 +9,7 @@ from core.migration.models import (
     MigrationCondition,
     MigrationMeta,
     TableMigrationResult,
+    TransferMode,
 )
 from core.migration.orchestrator import MigrationOrchestrator
 from core.migration.resume_manager import ResumeManager
@@ -21,6 +22,7 @@ __all__ = [
     "MigrationOrchestrator",
     "ResumeManager",
     "TableMigrationResult",
+    "TransferMode",
     "compute_chunks",
     "detect_chunk_key",
     "probe_range",
