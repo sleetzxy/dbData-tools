@@ -79,8 +79,19 @@ class PostgreSQLAdapter:
         :returns: ``(columns, batch_iterator)`` where each batch is a list of
             row tuples.
         """
-        cursor = client.cursor(name=f"stream_{id(self)}")
+        if not hasattr(self, "_stream_counter"):
+            self._stream_counter = 0
+        self._stream_counter += 1
+        cursor = client.cursor(
+            name=f"stream_{id(self)}_{self._stream_counter}",
+        )
         cursor.execute(query)
+        if cursor.description is None:
+            cursor.close()
+            raise ValueError(
+                "stream_read requires a query that returns rows; "
+                "cursor.description is None",
+            )
         columns = [desc[0] for desc in cursor.description]
 
         def _batches() -> Iterator[list[tuple]]:

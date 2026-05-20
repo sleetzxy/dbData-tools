@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-def test_pg_stream_read_yields_batches(mocker):
+def test_pg_stream_read_yields_batches(mocker) -> None:
     from db.adapters.postgresql_adapter import PostgreSQLAdapter
 
     adapter = PostgreSQLAdapter()
@@ -28,7 +28,7 @@ def test_pg_stream_read_yields_batches(mocker):
     assert batches[1] == [(3, "c")]
 
 
-def test_ch_stream_read(mocker):
+def test_ch_stream_read(mocker) -> None:
     from db.adapters.clickhouse_adapter import ClickHouseAdapter
 
     adapter = ClickHouseAdapter()

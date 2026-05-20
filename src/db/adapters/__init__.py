@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any, Protocol, runtime_checkable
 
 from db.connection import get_db_type
@@ -16,6 +17,10 @@ class DatabaseAdapter(Protocol):
     def create_client(self, db_config: dict[str, Any]) -> Any: ...
 
     def close_client(self, client: Any) -> None: ...
+
+    def stream_read(
+        self, client: Any, query: str, batch_size: int = 10000,
+    ) -> tuple[list[str], Iterator[list[tuple]]]: ...
 
     def export_csv(self, *args: Any, **kwargs: Any) -> Any: ...
 
