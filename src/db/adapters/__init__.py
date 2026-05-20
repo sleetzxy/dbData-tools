@@ -22,6 +22,20 @@ class DatabaseAdapter(Protocol):
         self, client: Any, query: str, batch_size: int = 10000,
     ) -> tuple[list[str], Iterator[list[tuple]]]: ...
 
+    def stream_write(
+        self, client: Any, table: str, columns: list[str],
+        rows_iter: Iterator[list[tuple]], schema: str = "",
+    ) -> int: ...
+
+    def copy_stream_transfer(
+        self, src_client: Any, dst_client: Any, src_query: str,
+        dst_table: str, columns: list[str], schema: str = "",
+    ) -> int: ...
+
+    def get_table_columns(
+        self, client: Any, table: str, schema: str = "",
+    ) -> list[str]: ...
+
     def export_csv(self, *args: Any, **kwargs: Any) -> Any: ...
 
     def import_csv(self, *args: Any, **kwargs: Any) -> Any: ...

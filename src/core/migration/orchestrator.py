@@ -223,12 +223,11 @@ class MigrationOrchestrator:
                 try:
                     if self.transfer_mode == TransferMode.STREAM:
                         target = cond.target_table or cond.table_name
+                        if self._resolve_truncate(chunk_index == 0):
+                            self._truncate_target(dst_client, target)
                         rows_in_chunk = self._stream_chunk(
-                            cond=cond,
-                            src_client=src_client,
-                            dst_client=dst_client,
-                            chunk=chunk,
-                            target_table=target,
+                            cond=cond, src_client=src_client, dst_client=dst_client,
+                            chunk=chunk, target_table=target,
                         )
                     else:
                         csv_path, rows_in_chunk = self._export_chunk(
@@ -488,6 +487,28 @@ class MigrationOrchestrator:
         if self.resume_from is not None:
             return False
         return self.truncate_before and is_first_chunk
+
+    def _truncate_target(self, dst_client: Any, target_table: str) -> None:
+        """Truncate target table before migrating first chunk."""
+        self.logger.info("TRUNCATE 目标表 %s.%s", self.dst_schema, target_table)
+        if self.dst_adapter.db_type == "postgresql":
+            import psycopg2
+            from psycopg2 import sql as psql
+            with dst_client.cursor() as cursor:
+                cursor.execute(
+                    psql.SQL("TRUNCATE TABLE {}.{}").format(
+                        psql.Identifier(self.dst_schema),
+                        psql.Identifier(target_table),
+                    )
+                )
+            dst_client.commit()
+        elif self.dst_adapter.db_type == "clickhouse":
+            db_name = self.dst_config.get("database", "")
+            if db_name:
+                full_table = f"`{db_name}`.`{target_table}`"
+            else:
+                full_table = f"`{target_table}`"
+            dst_client.command(f"TRUNCATE TABLE {full_table}")
 
     # ------------------------------------------------------------------
     # 辅助方法
