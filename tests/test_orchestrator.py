@@ -91,6 +91,41 @@ class _MockOrchAdapter:
         self.import_calls.append((table_names, is_first_chunk))
         return {"success": True, "imported_tables": table_names, "error_tables": []}
 
+    # ------------------------------------------------------------------
+    # Stream methods (needed when orchestrator uses default STREAM mode)
+    # ------------------------------------------------------------------
+
+    def _build_chunked_query(
+        self,
+        table: str,
+        schema: str = "",
+        where_clause: str = "",
+        custom_sql: str = "",
+        chunk_key: str = "",
+        chunk_start: Any = None,
+        chunk_end: Any = None,
+    ) -> Any:
+        class _Query:
+            def as_string(self, client: Any) -> str:
+                return f"SELECT * FROM {table}"
+        return _Query()
+
+    def get_table_columns(
+        self, client: Any, table_name: str, schema: str = "",
+    ) -> list[str]:
+        return ["id", "val"]
+
+    def copy_stream_transfer(
+        self,
+        src_client: Any,
+        dst_client: Any,
+        src_query: str,
+        dst_table: str,
+        columns: list[str],
+        schema: str = "",
+    ) -> int:
+        return 1
+
 
 # ---------------------------------------------------------------------------
 # Fixtures

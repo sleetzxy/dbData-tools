@@ -18,6 +18,7 @@ from core.migration.models import (
     MigrationCondition,
     MigrationMeta,
     TableMigrationResult,
+    TransferMode,
 )
 from core.migration.resume_manager import ResumeManager
 from db.adapters import get_adapter_for_config
@@ -55,6 +56,8 @@ class MigrationOrchestrator:
         progress_callback: Callable[[ChunkProgress], None] | None = None,
         src_adapter: Any = None,
         dst_adapter: Any = None,
+        transfer_mode: TransferMode = TransferMode.CSV,
+        stream_batch_size: int = 10000,
     ) -> None:
         self.src_config = src_config
         self.dst_config = dst_config
@@ -67,6 +70,8 @@ class MigrationOrchestrator:
         self.src_adapter = src_adapter or get_adapter_for_config(src_config)
         self.dst_adapter = dst_adapter or get_adapter_for_config(dst_config)
         self.resume_mgr = ResumeManager()
+        self.transfer_mode = transfer_mode
+        self.stream_batch_size = stream_batch_size
 
         # 解析 schema：PG 默认 "public"，CH 用配置中的 schema 或空串
         self.src_schema = src_config.get("schema", "")
@@ -213,21 +218,33 @@ class MigrationOrchestrator:
             # 重试循环（导出 + 导入作为一个原子单元）
             csv_path: str | None = None
             rows_in_chunk = 0
+            chunk_ok = False
             for attempt in range(_MAX_RETRIES + 1):
                 try:
-                    csv_path, rows_in_chunk = self._export_chunk(
-                        cond=cond,
-                        src_client=src_client,
-                        chunk=chunk,
-                        temp_dir=temp_dir,
-                    )
-                    is_first = chunk_index == 0
-                    self._import_chunk(
-                        cond=cond,
-                        dst_client=dst_client,
-                        csv_path=csv_path,
-                        is_first_chunk=is_first,
-                    )
+                    if self.transfer_mode == TransferMode.STREAM:
+                        target = cond.target_table or cond.table_name
+                        rows_in_chunk = self._stream_chunk(
+                            cond=cond,
+                            src_client=src_client,
+                            dst_client=dst_client,
+                            chunk=chunk,
+                            target_table=target,
+                        )
+                    else:
+                        csv_path, rows_in_chunk = self._export_chunk(
+                            cond=cond,
+                            src_client=src_client,
+                            chunk=chunk,
+                            temp_dir=temp_dir,
+                        )
+                        is_first = chunk_index == 0
+                        self._import_chunk(
+                            cond=cond,
+                            dst_client=dst_client,
+                            csv_path=csv_path,
+                            is_first_chunk=is_first,
+                        )
+                    chunk_ok = True
                     break  # 成功，退出重试循环
                 except Exception as exc:
                     if attempt == _MAX_RETRIES:
@@ -247,7 +264,7 @@ class MigrationOrchestrator:
                         time.sleep(wait)
 
             # 重试耗尽，记录错误并继续下一分块
-            if csv_path is None:
+            if not chunk_ok:
                 continue
 
             total_rows += rows_in_chunk
@@ -371,10 +388,11 @@ class MigrationOrchestrator:
         data_dir = os.path.dirname(csv_path)
         do_truncate = self._resolve_truncate(is_first_chunk)
 
+        target_table = cond.target_table or cond.table_name
         result = self.dst_adapter.import_csv(
             client=dst_client,
             db_config=self.dst_config,
-            table_names=[cond.table_name],
+            table_names=[target_table],
             data_dir=data_dir,
             schema=self.dst_schema,
             truncate_before=do_truncate,
@@ -391,6 +409,71 @@ class MigrationOrchestrator:
             if not error_msg:
                 error_msg = "未知导入错误"
             raise RuntimeError(f"导入分块失败: {error_msg}")
+
+    # ------------------------------------------------------------------
+    # 流式传输
+    # ------------------------------------------------------------------
+
+    def _stream_chunk(
+        self,
+        cond: MigrationCondition,
+        src_client: Any,
+        dst_client: Any,
+        chunk: ChunkSpec,
+        target_table: str,
+    ) -> int:
+        """Transfer a single chunk from source to target via memory (no disk I/O).
+
+        :return: Number of rows transferred.
+        :raises RuntimeError: If transfer fails.
+        """
+        chunk_key = cond.chunk_key
+        if not chunk_key:
+            chunk_key = detect_chunk_key(
+                self.src_adapter, src_client, cond.table_name, self.src_schema,
+            )
+
+        # Build source query (reuse existing adapter method)
+        src_query = self.src_adapter._build_chunked_query(
+            table=cond.table_name,
+            schema=self.src_schema,
+            where_clause=cond.where_clause,
+            custom_sql=cond.custom_sql,
+            chunk_key=chunk_key,
+            chunk_start=chunk.key_start,
+            chunk_end=chunk.key_end,
+        )
+
+        # Convert query object to string
+        if hasattr(src_query, 'as_string'):
+            query_str = src_query.as_string(src_client)
+        else:
+            query_str = str(src_query)
+
+        if self._can_use_copy_pipe():
+            columns = self.dst_adapter.get_table_columns(
+                dst_client, target_table, self.dst_schema,
+            )
+            return self.src_adapter.copy_stream_transfer(
+                src_client, dst_client,
+                query_str,
+                target_table, columns, self.dst_schema,
+            )
+        else:
+            col_names, rows_iter = self.src_adapter.stream_read(
+                src_client, query_str, self.stream_batch_size,
+            )
+            return self.dst_adapter.stream_write(
+                dst_client, target_table, col_names, rows_iter, self.dst_schema,
+            )
+
+    def _can_use_copy_pipe(self) -> bool:
+        """Check if source and destination support PG-to-PG COPY pipe."""
+        return (
+            self.src_adapter.db_type == "postgresql"
+            and self.dst_adapter.db_type == "postgresql"
+            and hasattr(self.src_adapter, "copy_stream_transfer")
+        )
 
     # ------------------------------------------------------------------
     # TRUNCATE 策略
