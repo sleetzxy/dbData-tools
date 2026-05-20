@@ -789,6 +789,72 @@ class PostgreSQLAdapter:
 
         return result
 
+    def copy_stream_transfer(
+        self,
+        src_client: psycopg2.extensions.connection,
+        dst_client: psycopg2.extensions.connection,
+        src_query: str,
+        dst_table: str,
+        columns: list[str],
+        schema: str = "public",
+    ) -> int:
+        """PG to PG high-speed transfer via COPY through an in-memory buffer.
+
+        Streams data from ``src_query`` on the source connection into the target
+        table using ``COPY ... TO STDOUT`` followed by ``COPY ... FROM STDIN``,
+        with an ``io.StringIO`` buffer as intermediary -- no disk I/O.
+
+        :param src_client: Source PG connection.
+        :param dst_client: Target PG connection.
+        :param src_query: SELECT query to read data from the source.
+        :param dst_table: Target table name.
+        :param columns: Column names to insert into.
+        :param schema: Target schema name (default ``"public"``).
+        :returns: Number of rows transferred.
+        """
+        import io
+
+        buffer = io.StringIO()
+
+        with src_client.cursor() as src_cur:
+            copy_out = sql.SQL("COPY ({}) TO STDOUT WITH (FORMAT CSV, HEADER false)").format(
+                sql.SQL(src_query),
+            )
+            if isinstance(src_client, psycopg2.extensions.connection):
+                copy_out_str = copy_out.as_string(src_client)
+            else:
+                copy_out_str = (
+                    f"COPY ({src_query}) TO STDOUT WITH (FORMAT CSV, HEADER false)"
+                )
+            src_cur.copy_expert(copy_out_str, buffer)
+
+        buffer.seek(0)
+        content = buffer.getvalue()
+        if not content.strip():
+            return 0
+        row_count = content.count("\n")
+
+        buffer.seek(0)
+        with dst_client.cursor() as dst_cur:
+            cols_sql = sql.SQL(", ").join(sql.Identifier(c) for c in columns)
+            copy_in = sql.SQL("COPY {}.{} ({}) FROM STDIN WITH (FORMAT CSV)").format(
+                sql.Identifier(schema),
+                sql.Identifier(dst_table),
+                cols_sql,
+            )
+            if isinstance(dst_client, psycopg2.extensions.connection):
+                copy_in_str = copy_in.as_string(dst_client)
+            else:
+                cols_join = ", ".join(f'"{c}"' for c in columns)
+                copy_in_str = (
+                    f'COPY "{schema}"."{dst_table}" ({cols_join}) '
+                    f"FROM STDIN WITH (FORMAT CSV)"
+                )
+            dst_cur.copy_expert(copy_in_str, buffer)
+
+        dst_client.commit()
+        return row_count
+
     def export_sql(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Write schema data and DDL for ``schema`` into a single ``.sql`` file.
 
