@@ -54,3 +54,30 @@ def test_copy_stream_transfer_empty(mocker):
     )
     assert count == 0
     mock_dst_cursor.copy_expert.assert_not_called()
+
+
+def test_copy_stream_transfer_embedded_newlines(mocker):
+    """Row count is correct even when CSV fields contain newlines."""
+    from db.adapters.postgresql_adapter import PostgreSQLAdapter
+
+    adapter = PostgreSQLAdapter()
+
+    mock_src_cursor = mocker.MagicMock()
+    mock_dst_cursor = mocker.MagicMock()
+    mock_src_client = mocker.MagicMock()
+    mock_dst_client = mocker.MagicMock()
+    mock_src_client.cursor.return_value.__enter__.return_value = mock_src_cursor
+    mock_dst_client.cursor.return_value.__enter__.return_value = mock_dst_cursor
+
+    # Two rows: first has a quoted field with embedded newline
+    def copy_to_stdout(sql_str, buf):
+        buf.write('1,"line1\nline2"\n2,simple\n')
+
+    mock_src_cursor.copy_expert.side_effect = copy_to_stdout
+
+    count = adapter.copy_stream_transfer(
+        mock_src_client, mock_dst_client,
+        "SELECT * FROM t",
+        "users", ["id", "description"], "public",
+    )
+    assert count == 2

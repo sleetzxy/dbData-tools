@@ -812,6 +812,7 @@ class PostgreSQLAdapter:
         :param schema: Target schema name (default ``"public"``).
         :returns: Number of rows transferred.
         """
+        import csv
         import io
 
         buffer = io.StringIO()
@@ -828,11 +829,11 @@ class PostgreSQLAdapter:
                 )
             src_cur.copy_expert(copy_out_str, buffer)
 
-        buffer.seek(0)
         content = buffer.getvalue()
         if not content.strip():
             return 0
-        row_count = content.count("\n")
+        # Use csv.reader to count rows correctly even when fields contain newlines
+        row_count = sum(1 for _ in csv.reader(io.StringIO(content)))
 
         buffer.seek(0)
         with dst_client.cursor() as dst_cur:
@@ -845,9 +846,15 @@ class PostgreSQLAdapter:
             if isinstance(dst_client, psycopg2.extensions.connection):
                 copy_in_str = copy_in.as_string(dst_client)
             else:
-                cols_join = ", ".join(f'"{c}"' for c in columns)
+                cols_join = ", ".join(
+                    _quote_pg_ident_segment(c) for c in columns
+                )
+                schema_tbl = (
+                    f"{_quote_pg_ident_segment(schema)}."
+                    f"{_quote_pg_ident_segment(dst_table)}"
+                )
                 copy_in_str = (
-                    f'COPY "{schema}"."{dst_table}" ({cols_join}) '
+                    f"COPY {schema_tbl} ({cols_join}) "
                     f"FROM STDIN WITH (FORMAT CSV)"
                 )
             dst_cur.copy_expert(copy_in_str, buffer)
