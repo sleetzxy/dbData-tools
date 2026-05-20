@@ -97,6 +97,40 @@ class ClickHouseAdapter:
 
         return columns, _batches()
 
+    def stream_write(
+        self,
+        client: Any,
+        table: str,
+        columns: list[str],
+        rows_iter: Iterator[list[tuple]],
+        database: str = "",
+    ) -> int:
+        """Consume row batches and INSERT into target table via VALUES.
+
+        :param client: Open ``clickhouse_connect`` client.
+        :param table: Target table name.
+        :param columns: Column names to insert into.
+        :param rows_iter: Iterator yielding batches of row tuples.
+        :param database: Database name (falls back to ``client.database``).
+        :returns: Total number of rows inserted.
+        """
+        total = 0
+        db_name = database or client.database
+        full_table = self._qualified_table(db_name, table)
+        col_str = ", ".join(self._quote_identifier(c) for c in columns)
+        placeholders = ", ".join(["%s"] * len(columns))
+        for batch in rows_iter:
+            if not batch:
+                continue
+            values = ", ".join(f"({placeholders})" for _ in batch)
+            flat_values = [v for row in batch for v in row]
+            client.command(
+                f"INSERT INTO {full_table} ({col_str}) VALUES {values}",
+                flat_values,
+            )
+            total += len(batch)
+        return total
+
     def _backup_tables(
         self,
         client: Any,

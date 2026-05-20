@@ -106,6 +106,41 @@ class PostgreSQLAdapter:
 
         return columns, _batches()
 
+    def stream_write(
+        self,
+        client: psycopg2.extensions.connection,
+        table: str,
+        columns: list[str],
+        rows_iter: Iterator[list[tuple]],
+        schema: str = "public",
+    ) -> int:
+        """Consume row batches and INSERT into target table via execute_values.
+
+        :param client: Open ``psycopg2`` connection.
+        :param table: Target table name.
+        :param columns: Column names to insert into.
+        :param rows_iter: Iterator yielding batches of row tuples.
+        :param schema: Schema name (default ``"public"``).
+        :returns: Total number of rows inserted.
+        """
+        from psycopg2.extras import execute_values
+
+        total = 0
+        cols_sql = sql.SQL(", ").join(
+            sql.Identifier(c) for c in columns
+        )
+        insert_sql = sql.SQL("INSERT INTO {}.{} ({}) VALUES %s").format(
+            sql.Identifier(schema), sql.Identifier(table), cols_sql,
+        )
+        with client.cursor() as cursor:
+            for batch in rows_iter:
+                if not batch:
+                    continue
+                execute_values(cursor, insert_sql, batch)
+                total += len(batch)
+        client.commit()
+        return total
+
     @staticmethod
     def _get_table_counts(
         client: psycopg2.extensions.connection,
