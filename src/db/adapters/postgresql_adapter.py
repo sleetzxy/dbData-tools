@@ -46,6 +46,20 @@ class PostgreSQLAdapter:
         client.close()
 
     @staticmethod
+    def get_table_columns(
+        client: psycopg2.extensions.connection, table: str, schema: str = "public",
+    ) -> list[str]:
+        table_str = str(table).strip()
+        with client.cursor() as cursor:
+            cursor.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = %s "
+                "ORDER BY ordinal_position",
+                (schema, table_str),
+            )
+            return [row[0] for row in cursor]
+
+    @staticmethod
     def _get_table_counts(
         client: psycopg2.extensions.connection,
         schema: str,

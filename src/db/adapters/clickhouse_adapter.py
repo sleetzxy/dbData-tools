@@ -16,6 +16,18 @@ class ClickHouseAdapter:
 
     db_type = "clickhouse"
 
+    def get_table_columns(
+        self, client: Any, table: str, database: str = "",
+    ) -> list[str]:
+        table_str = self._validate_identifier(table, "table")
+        db_name = database or client.database
+        result = client.query(
+            f"SELECT name FROM system.columns "
+            f"WHERE database = '{db_name}' AND table = '{table_str}' "
+            f"ORDER BY position"
+        )
+        return list(result.result_columns) if result.result_columns else []
+
     @classmethod
     def _validate_identifier(cls, name: str, label: str) -> str:
         cleaned = name.strip()
