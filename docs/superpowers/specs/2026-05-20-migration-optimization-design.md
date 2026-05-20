@@ -95,6 +95,11 @@ Orchestrator 在 `_stream_chunk()` 中根据适配器类型自动选择：
 
 ## 适配器接口变更
 
+### 已有方法说明
+
+`_build_chunked_query()` 已在两个适配器中实现（私有方法），用于根据条件/分块键/范围拼装 SELECT
+查询。流式路径复用该方法构造查询 SQL，然后传给 `stream_read()` 或 `copy_stream_transfer()`。
+
 ### 协议新增方法
 
 ```python
@@ -106,8 +111,12 @@ class AdapterProtocol(Protocol):
     # 新增：流式读取
     def stream_read(
         self, client, query: str, batch_size: int = 10000
-    ) -> Iterator[tuple[list[tuple], list[str]]]:
-        """执行查询，返回 (行批次, 列名列表) 的生成器。"""
+    ) -> tuple[list[str], Iterator[list[tuple]]]:
+        """执行查询，返回 (列名列表, 行批次生成器)。
+
+        生成器每次 yield 一个 list[tuple]（一批行），调用方逐批消费后
+        传给 stream_write()。列名在调用时立即获取，不参与迭代。
+        """
         ...
 
     # 新增：流式写入
@@ -121,7 +130,7 @@ class AdapterProtocol(Protocol):
     # 新增：COPY 管道传输（仅 PG 适配器实现）
     def copy_stream_transfer(
         self, src_client, dst_client, src_query: str,
-        dst_table: str, dst_columns: list[str], schema: str = "",
+        dst_table: str, columns: list[str], schema: str = "",
     ) -> int:
         """PG→PG 高速通道：COPY TO STDOUT → 内存 → COPY FROM STDIN。"""
         ...
@@ -130,12 +139,12 @@ class AdapterProtocol(Protocol):
 ### PostgreSQL 适配器
 
 - `copy_stream_transfer()`: 将 `src_query` 的 COPY 输出写入 `io.StringIO`，再通过 COPY FROM STDIN 写入目标表
-- `stream_read()`: 使用命名游标 + `fetchmany`
+- `stream_read()`: 使用命名游标 + `fetchmany`，执行查询后立即获取 `cursor.description` 得到列名
 - `stream_write()`: 使用 `execute_values()` 批量写入
 
 ### ClickHouse 适配器
 
-- `stream_read()`: 使用 CH 客户端 cursor + `fetchmany`
+- `stream_read()`: 使用 CH 客户端 cursor + `fetchmany`，从 `cursor.description` 获取列名
 - `stream_write()`: 使用 `INSERT INTO ... VALUES` 批量语法
 - 无 `copy_stream_transfer()`（CH 不支持 COPY 协议）
 
@@ -176,18 +185,26 @@ _migrate_table(cond):
 def _stream_chunk(self, cond, src_client, dst_client, chunk, target_table):
     query = self.src_adapter._build_chunked_query(...)
 
+    # 从目标表获取列信息（COPY 和 INSERT 都需要）
+    columns = self.dst_adapter.get_table_columns(dst_client, target_table, self.dst_schema)
+
     if self._can_use_copy_pipe():
         # PG→PG 高速通道
         return self.src_adapter.copy_stream_transfer(
-            src_client, dst_client, query, target_table, ...
+            src_client, dst_client, query, target_table, columns, self.dst_schema,
         )
     else:
-        # 异构路径：读批次 → 写批次
-        rows_iter = self.src_adapter.stream_read(src_client, query, self.batch_size)
+        # 异构路径：stream_read 返回 (columns, rows_iter)
+        col_names, rows_iter = self.src_adapter.stream_read(
+            src_client, query, self.batch_size
+        )
         return self.dst_adapter.stream_write(
-            dst_client, target_table, columns, rows_iter, ...
+            dst_client, target_table, col_names, rows_iter, self.dst_schema,
         )
 ```
+
+`_can_use_copy_pipe()` 在源和目标适配器均为 PostgreSQL 时返回 True，
+即 `src_adapter.db_type == "postgresql" and dst_adapter.db_type == "postgresql"`。
 
 ---
 
@@ -233,7 +250,7 @@ def _stream_chunk(self, cond, src_client, dst_client, chunk, target_table):
 
 ### Orchestrator
 - STREAM 模式下的单表/多表迁移
-- CSV 模式回归（不破坏现有行为）
+- CSV 模式回归（不破坏现有行为）
 - `target_table` 为空时退化为 `table_name`
 - `target_table` 非空时正确路由
 
