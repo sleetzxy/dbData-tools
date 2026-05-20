@@ -20,11 +20,16 @@ class ClickHouseAdapter:
         self, client: Any, table: str, database: str = "",
     ) -> list[str]:
         table_str = self._validate_identifier(table, "table")
-        db_name = database or client.database
+        db_name = (
+            self._validate_identifier(database, "database")
+            if database
+            else client.database
+        )
         result = client.query(
-            f"SELECT name FROM system.columns "
-            f"WHERE database = '{db_name}' AND table = '{table_str}' "
-            f"ORDER BY position"
+            "SELECT name FROM system.columns "
+            "WHERE database = %(database)s AND table = %(table)s "
+            "ORDER BY position",
+            parameters={"database": db_name, "table": table_str},
         )
         return [row[0] for row in result.result_rows]
 

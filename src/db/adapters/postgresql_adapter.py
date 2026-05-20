@@ -45,17 +45,18 @@ class PostgreSQLAdapter:
         """Close ``client`` if it is still open."""
         client.close()
 
-    @staticmethod
     def get_table_columns(
-        client: psycopg2.extensions.connection, table: str, schema: str = "public",
+        self, client: psycopg2.extensions.connection, table: str, schema: str = "public",
     ) -> list[str]:
-        table_str = str(table).strip()
+        cleaned = str(table).strip()
+        if not cleaned or "\x00" in cleaned:
+            raise ValueError(f"Invalid table identifier: {table}")
         with client.cursor() as cursor:
             cursor.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_schema = %s AND table_name = %s "
                 "ORDER BY ordinal_position",
-                (schema, table_str),
+                (schema, cleaned),
             )
             return [row[0] for row in cursor]
 
