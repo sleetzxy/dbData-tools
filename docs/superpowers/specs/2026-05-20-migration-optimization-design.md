@@ -97,8 +97,8 @@ Orchestrator 在 `_stream_chunk()` 中根据适配器类型自动选择：
 
 ### 已有方法说明
 
-`_build_chunked_query()` 已在两个适配器中实现（私有方法），用于根据条件/分块键/范围拼装 SELECT
-查询。流式路径复用该方法构造查询 SQL，然后传给 `stream_read()` 或 `copy_stream_transfer()`。
+`_build_chunked_query()` 和 `get_table_columns()` 已在两个适配器中实现，流式路径复用这两个
+已有方法构造查询 SQL 与获取列信息。
 
 ### 协议新增方法
 
@@ -185,11 +185,11 @@ _migrate_table(cond):
 def _stream_chunk(self, cond, src_client, dst_client, chunk, target_table):
     query = self.src_adapter._build_chunked_query(...)
 
-    # 从目标表获取列信息（COPY 和 INSERT 都需要）
-    columns = self.dst_adapter.get_table_columns(dst_client, target_table, self.dst_schema)
-
     if self._can_use_copy_pipe():
-        # PG→PG 高速通道
+        # PG→PG 高速通道：COPY 需要目标表列信息
+        columns = self.dst_adapter.get_table_columns(
+            dst_client, target_table, self.dst_schema
+        )
         return self.src_adapter.copy_stream_transfer(
             src_client, dst_client, query, target_table, columns, self.dst_schema,
         )
@@ -276,4 +276,4 @@ def _stream_chunk(self, cond, src_client, dst_client, chunk, target_table):
 
 - **流式 COPY 管道仅限 PG→PG**：异构场景使用批量 INSERT，速度慢于 COPY 但仍无磁盘 I/O
 - **内存控制**：流式模式每个分块数据全在内存，默认分块大小 100K 行通常占用 10-50MB。分块大小过大时可能 OOM
-- **断点续传兼容**：切换传输模式不影断点恢复，断点记录的是已完成的分块编号
+- **断点续传兼容**：切换传输模式不影响断点恢复，断点记录的是已完成的分块编号
