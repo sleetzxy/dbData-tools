@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Literal
+
+
+class TransferMode(Enum):
+    """数据传输模式枚举。"""
+
+    CSV = "csv"
+    STREAM = "stream"
 
 
 @dataclass
@@ -10,6 +18,7 @@ class MigrationCondition:
 
     table_name: str
     mode: Literal["where", "sql"]
+    target_table: str = ""
     where_clause: str = ""
     custom_sql: str = ""
     chunk_key: str = ""
