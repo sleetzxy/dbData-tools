@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -69,6 +69,33 @@ class ClickHouseAdapter:
             return
         if hasattr(client, "disconnect"):
             client.disconnect()
+
+    def stream_read(
+        self,
+        client: Any,
+        query: str,
+        batch_size: int = 10000,
+    ) -> tuple[list[str], Iterator[list[tuple]]]:
+        """Execute query, return (columns, batch iterator).
+
+        ``clickhouse-connect`` does not support server-side cursors, so the
+        entire result set is loaded into memory and then sliced into batches.
+
+        :param client: Open ``clickhouse_connect`` client.
+        :param query: SQL SELECT statement.
+        :param batch_size: Number of rows per batch (default 10 000).
+        :returns: ``(columns, batch_iterator)`` where each batch is a list of
+            row tuples.
+        """
+        result = client.query(query)
+        columns = list(result.column_names)
+        all_rows: list[tuple] = list(result.result_rows)
+
+        def _batches() -> Iterator[list[tuple]]:
+            for i in range(0, len(all_rows), batch_size):
+                yield all_rows[i:i + batch_size]
+
+        return columns, _batches()
 
     def _backup_tables(
         self,

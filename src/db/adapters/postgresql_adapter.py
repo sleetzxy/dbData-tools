@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from datetime import datetime
 from typing import Any
 
@@ -59,6 +60,40 @@ class PostgreSQLAdapter:
                 (schema, cleaned),
             )
             return [row[0] for row in cursor]
+
+    def stream_read(
+        self,
+        client: psycopg2.extensions.connection,
+        query: str,
+        batch_size: int = 10000,
+    ) -> tuple[list[str], Iterator[list[tuple]]]:
+        """Execute query via server-side cursor, return (columns, batch iterator).
+
+        Uses a named ``psycopg2`` server-side cursor so rows are fetched from
+        the database incrementally without loading the entire result set into
+        memory at once.
+
+        :param client: Open ``psycopg2`` connection.
+        :param query: SQL SELECT statement.
+        :param batch_size: Number of rows per batch (default 10 000).
+        :returns: ``(columns, batch_iterator)`` where each batch is a list of
+            row tuples.
+        """
+        cursor = client.cursor(name=f"stream_{id(self)}")
+        cursor.execute(query)
+        columns = [desc[0] for desc in cursor.description]
+
+        def _batches() -> Iterator[list[tuple]]:
+            try:
+                while True:
+                    rows = cursor.fetchmany(batch_size)
+                    if not rows:
+                        break
+                    yield rows
+            finally:
+                cursor.close()
+
+        return columns, _batches()
 
     @staticmethod
     def _get_table_counts(
