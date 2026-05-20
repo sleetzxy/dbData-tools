@@ -497,6 +497,10 @@ git commit -m "feat(adapters): 添加 copy_stream_transfer（PG→PG COPY 内存
 
 ### Task 6: Orchestrator — 流式传输路径
 
+**前置验证:** 确认两个适配器的 `_build_chunked_query` 签名接受 `chunk_start`/`chunk_end` 参数 —
+已在第三步设计探索中确认 PG (`postgresql_adapter.py:291`) 和 CH (`clickhouse_adapter.py:125`)
+均支持 `chunk_start: Any = None, chunk_end: Any = None`。
+
 **Files:**
 - Modify: `src/core/migration/orchestrator.py`
 - Create: `tests/test_orchestrator_stream.py`
@@ -649,7 +653,7 @@ from core.migration.models import TransferMode
 class MigrationOrchestrator:
     def __init__(
         self, ...,
-        transfer_mode: TransferMode = TransferMode.CSV,  # 默认 CSV 保持向后兼容
+        transfer_mode: TransferMode = TransferMode.STREAM,  # 默认流式
         stream_batch_size: int = 10000,
     ):
         ...
@@ -791,7 +795,7 @@ def migrate_tables(
     truncate_before=True,
     src_adapter=None, dst_adapter=None,
     logger=None, conditions=None,
-    transfer_mode: TransferMode = TransferMode.CSV,  # 新增
+    transfer_mode: TransferMode = TransferMode.CSV,  # 入口默认 CSV 保持向后兼容
     stream_batch_size: int = 10000,  # 新增
 ) -> dict:
     ...
@@ -800,6 +804,10 @@ def migrate_tables(
         transfer_mode=transfer_mode,
         stream_batch_size=stream_batch_size,
     )
+```
+
+> 说明：Orchestrator 内部默认 STREAM，但 `migrate_tables()` 入口保持 CSV 默认，
+> 保证现有的直接调用方（如测试）行为不变。GUI 层显式传 STREAM。
 ```
 
 - [ ] **Step 2: 运行测试确认无回归**
@@ -910,11 +918,11 @@ git commit -m "feat(gui): _TableCard 增加目标表名输入，条件改为可�
 
 ```python
 # 传输模式
-mode_row = self.ctk.CTkFrame(settings_frame, fg_color="transparent")
+mode_row = ctk.CTkFrame(settings_frame, fg_color="transparent")
 mode_row.pack(fill="x", padx=10, pady=(4, 8))
 StyledLabel(mode_row, text="传输模式").pack(side="left", padx=(0, 8))
 self.transfer_mode_var = tk.StringVar(value="stream")
-self.ctk.CTkRadioButton(
+ctk.CTkRadioButton(
     mode_row, text="流式", variable=self.transfer_mode_var, value="stream",
     font=("Microsoft YaHei", 10),
     text_color=self.idea_dark_colors["text_primary"],
@@ -922,7 +930,7 @@ self.ctk.CTkRadioButton(
     hover_color=self.idea_dark_colors["accent_hover"],
     border_color=self.idea_dark_colors["border"],
 ).pack(side="left", padx=(0, 8))
-self.ctk.CTkRadioButton(
+ctk.CTkRadioButton(
     mode_row, text="CSV", variable=self.transfer_mode_var, value="csv",
     font=("Microsoft YaHei", 10),
     text_color=self.idea_dark_colors["text_primary"],
