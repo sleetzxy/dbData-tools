@@ -23,7 +23,7 @@ def test_ch_get_table_columns(mocker):
 
     adapter = ClickHouseAdapter()
     mock_client = mocker.MagicMock()
-    mock_client.query.return_value.result_columns = ["id", "name", "created_at"]
+    mock_client.query.return_value.result_rows = [("id",), ("name",), ("created_at",)]
 
     columns = adapter.get_table_columns(mock_client, "users", "mydb")
     assert columns == ["id", "name", "created_at"]

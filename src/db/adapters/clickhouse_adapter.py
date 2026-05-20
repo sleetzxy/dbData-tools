@@ -26,7 +26,7 @@ class ClickHouseAdapter:
             f"WHERE database = '{db_name}' AND table = '{table_str}' "
             f"ORDER BY position"
         )
-        return list(result.result_columns) if result.result_columns else []
+        return [row[0] for row in result.result_rows]
 
     @classmethod
     def _validate_identifier(cls, name: str, label: str) -> str:
