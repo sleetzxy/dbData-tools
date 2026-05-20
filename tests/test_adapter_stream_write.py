@@ -53,11 +53,21 @@ def test_pg_stream_write_empty(mocker):
     mock_client = mocker.MagicMock()
     mock_client.cursor.return_value.__enter__.return_value = mock_cursor
 
-    def batch_iter():
-        if False:
-            yield  # never yields
-
     count = adapter.stream_write(
-        mock_client, "users", ["id", "name"], batch_iter(), "public",
+        mock_client, "users", ["id", "name"], iter([]), "public",
     )
     assert count == 0
+
+
+def test_ch_stream_write_empty(mocker):
+    from db.adapters.clickhouse_adapter import ClickHouseAdapter
+
+    adapter = ClickHouseAdapter()
+    mock_client = mocker.MagicMock()
+    mock_client.database = "mydb"
+
+    count = adapter.stream_write(
+        mock_client, "users", ["id", "val"], iter([]), "mydb",
+    )
+    assert count == 0
+    mock_client.command.assert_not_called()
