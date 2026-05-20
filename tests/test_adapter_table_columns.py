@@ -62,7 +62,7 @@ def test_ch_get_table_columns_default_database(mocker):
     mock_client.database = "default_db"
     mock_client.query.return_value.result_rows = [("col1",), ("col2",)]
 
-    columns = adapter.get_table_columns(mock_client, "users", database="")
+    columns = adapter.get_table_columns(mock_client, "users", schema="")
     assert columns == ["col1", "col2"]
     mock_client.query.assert_called_once()
     _, kwargs = mock_client.query.call_args

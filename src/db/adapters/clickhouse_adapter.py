@@ -17,12 +17,12 @@ class ClickHouseAdapter:
     db_type = "clickhouse"
 
     def get_table_columns(
-        self, client: Any, table: str, database: str = "",
+        self, client: Any, table: str, schema: str = "",
     ) -> list[str]:
         table_str = self._validate_identifier(table, "table")
         db_name = (
-            self._validate_identifier(database, "database")
-            if database
+            self._validate_identifier(schema, "database")
+            if schema
             else client.database
         )
         result = client.query(
@@ -103,7 +103,7 @@ class ClickHouseAdapter:
         table: str,
         columns: list[str],
         rows_iter: Iterator[list[tuple]],
-        database: str = "",
+        schema: str = "",
     ) -> int:
         """Consume row batches and INSERT into target table via VALUES.
 
@@ -111,11 +111,11 @@ class ClickHouseAdapter:
         :param table: Target table name.
         :param columns: Column names to insert into.
         :param rows_iter: Iterator yielding batches of row tuples.
-        :param database: Database name (falls back to ``client.database``).
+        :param schema: Database name (falls back to ``client.database``).
         :returns: Total number of rows inserted.
         """
         total = 0
-        db_name = database or client.database
+        db_name = schema or client.database
         full_table = self._qualified_table(db_name, table)
         col_str = ", ".join(self._quote_identifier(c) for c in columns)
         placeholders = ", ".join(["%s"] * len(columns))

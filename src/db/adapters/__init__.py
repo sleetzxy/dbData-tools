@@ -27,11 +27,6 @@ class DatabaseAdapter(Protocol):
         rows_iter: Iterator[list[tuple]], schema: str = "",
     ) -> int: ...
 
-    def copy_stream_transfer(
-        self, src_client: Any, dst_client: Any, src_query: str,
-        dst_table: str, columns: list[str], schema: str = "",
-    ) -> int: ...
-
     def get_table_columns(
         self, client: Any, table: str, schema: str = "",
     ) -> list[str]: ...
