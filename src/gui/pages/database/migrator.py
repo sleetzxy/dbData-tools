@@ -10,7 +10,7 @@ from tkinter import messagebox
 
 import customtkinter as ctk
 
-from core.migration.models import MigrationCondition
+from core.migration.models import MigrationCondition, TransferMode
 from core.migration.resume_manager import ResumeManager
 from core.migrator import logger as core_logger
 from core.migrator import migrate_tables
@@ -37,18 +37,32 @@ class _TableCard:
         self.header = ctk.CTkFrame(parent, fg_color=colors["card_bg"], corner_radius=6)
         self.header.pack(fill="x", pady=(4, 0))
 
-        # 表名输入
+        # 源表名输入
         self.name_var = tk.StringVar(value=table_name)
         self.name_entry = ctk.CTkEntry(
             self.header,
             textvariable=self.name_var,
-            placeholder_text=f"表名 #{index + 1}",
+            placeholder_text=f"源表名 #{index + 1}",
             font=("Microsoft YaHei", 11),
             height=30,
             fg_color=colors["bg"],
             border_color=colors["border"],
         )
         self.name_entry.pack(side="left", fill="x", expand=True, padx=(8, 4), pady=4)
+
+        # 目标表名输入
+        self.target_var = tk.StringVar()
+        self.target_entry = ctk.CTkEntry(
+            self.header,
+            textvariable=self.target_var,
+            placeholder_text="目标表名（空=同源）",
+            font=("Microsoft YaHei", 11),
+            height=30,
+            width=140,
+            fg_color=colors["bg"],
+            border_color=colors["border"],
+        )
+        self.target_entry.pack(side="left", padx=(0, 4), pady=4)
 
         # 展开/折叠
         self.expand_btn = ctk.CTkButton(
@@ -122,7 +136,7 @@ class _TableCard:
         # 条件/SQL 输入
         self.cond_label = ctk.CTkLabel(
             self.panel,
-            text="WHERE 子句（不含 WHERE 关键字）",
+            text="WHERE 子句（可选）",
             font=("Microsoft YaHei", 10),
             text_color=colors["text_secondary"],
             anchor="w",
@@ -198,7 +212,7 @@ class _TableCard:
     def _on_mode_change(self) -> None:
         mode = self.mode_var.get()
         if mode == "where":
-            self.cond_label.configure(text="WHERE 子句（不含 WHERE 关键字）")
+            self.cond_label.configure(text="WHERE 子句（可选）")
             self.cond_entry.configure(
                 placeholder_text="例: status = 'active' AND amount > 100", height=28
             )
@@ -230,6 +244,7 @@ class _TableCard:
         chunk_size = int(chunk_size_str) if chunk_size_str.isdigit() else 100_000
         return MigrationCondition(
             table_name=name,
+            target_table=self.target_var.get().strip(),
             mode=mode,  # type: ignore[arg-type]
             where_clause=self.cond_entry.get().strip() if mode == "where" else "",
             custom_sql=self.cond_entry.get().strip() if mode == "sql" else "",
@@ -240,6 +255,7 @@ class _TableCard:
 
     def configure(self, cond: MigrationCondition) -> None:
         self.name_var.set(cond.table_name)
+        self.target_var.set(cond.target_table)
         self.mode_var.set(cond.mode)
         self.cond_entry.delete(0, "end")
         cond_text = cond.custom_sql if cond.mode == "sql" else cond.where_clause
@@ -334,6 +350,28 @@ class MigratorPage(BaseToolPage):
             border_color=self.idea_dark_colors["border"],
         ).pack(side="left")
 
+        # 传输模式
+        mode_row = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        mode_row.pack(fill="x", padx=10, pady=(0, 8))
+        StyledLabel(mode_row, text="传输模式").pack(side="left", padx=(0, 8))
+        self.transfer_mode_var = tk.StringVar(value="stream")
+        ctk.CTkRadioButton(
+            mode_row, text="流式", variable=self.transfer_mode_var, value="stream",
+            font=("Microsoft YaHei", 10),
+            text_color=self.idea_dark_colors["text_primary"],
+            fg_color=self.idea_dark_colors["accent"],
+            hover_color=self.idea_dark_colors["accent_hover"],
+            border_color=self.idea_dark_colors["border"],
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkRadioButton(
+            mode_row, text="CSV", variable=self.transfer_mode_var, value="csv",
+            font=("Microsoft YaHei", 10),
+            text_color=self.idea_dark_colors["text_primary"],
+            fg_color=self.idea_dark_colors["accent"],
+            hover_color=self.idea_dark_colors["accent_hover"],
+            border_color=self.idea_dark_colors["border"],
+        ).pack(side="left")
+
         # ---- 表配置列表 ----
         table_header = self.ctk.CTkFrame(parent, fg_color="transparent")
         table_header.pack(fill="x", pady=(4, 4))
@@ -408,7 +446,7 @@ class MigratorPage(BaseToolPage):
     def _renumber_cards(self) -> None:
         for i, card in enumerate(self._table_cards):
             card.index = i
-            card.name_entry.configure(placeholder_text=f"表名 #{i + 1}")
+            card.name_entry.configure(placeholder_text=f"源表名 #{i + 1}")
 
     def _collect_conditions(self) -> list[MigrationCondition]:
         conditions: list[MigrationCondition] = []
@@ -436,9 +474,13 @@ class MigratorPage(BaseToolPage):
             "dst_connection_name": self.dst_selector.connection_var.get(),
             "truncate_before": self.truncate_var.get(),
             "default_chunk_size": self.default_chunk_var.get(),
+            "transfer_mode": self.transfer_mode_var.get()
+            if hasattr(self, "transfer_mode_var")
+            else "stream",
             "table_configs": [
                 {
                     "table_name": c.table_name,
+                    "target_table": c.target_var.get().strip(),
                     "mode": c.mode_var.get(),
                     "where_clause": c.cond_entry.get().strip()
                     if c.mode_var.get() == "where"
@@ -463,6 +505,8 @@ class MigratorPage(BaseToolPage):
             if dst_name:
                 self.dst_selector.set_value(dst_name)
             self.truncate_var.set(config.get("truncate_before", True))
+            if hasattr(self, "transfer_mode_var"):
+                self.transfer_mode_var.set(config.get("transfer_mode", "stream"))
             chunk_size = config.get("default_chunk_size", "100000")
             if chunk_size:
                 self.default_chunk_var.set(str(chunk_size))
@@ -475,6 +519,7 @@ class MigratorPage(BaseToolPage):
                 for tc in table_configs:
                     card = self._add_table_row()
                     card.name_var.set(tc.get("table_name", ""))
+                    card.target_var.set(tc.get("target_table", ""))
                     card.mode_var.set(tc.get("mode", "where"))
                     card.cond_entry.delete(0, "end")
                     card.cond_entry.insert(
@@ -636,6 +681,7 @@ class MigratorPage(BaseToolPage):
                     )
 
         # 使用迁移核心（生产模式走 Orchestrator）
+        mode = TransferMode.STREAM if self.transfer_mode_var.get() == "stream" else TransferMode.CSV
         result = migrate_tables(
             src_config=src_config,
             dst_config=dst_config,
@@ -643,6 +689,7 @@ class MigratorPage(BaseToolPage):
             truncate_before=truncate_before,
             logger=self.logger,
             conditions=conditions,
+            transfer_mode=mode,
         )
 
         if result.get("success"):
@@ -672,12 +719,7 @@ class MigratorPage(BaseToolPage):
                 continue
             if card.mode_var.get() == "sql":
                 sql = card.cond_entry.get().strip()
-                if not sql:
-                    messagebox.showerror(
-                        "错误", f"表 {card.table_name} 选择了 SQL 模式，但未输入 SQL"
-                    )
-                    return False
-                if not card.chunk_key_var.get().strip():
+                if sql and not card.chunk_key_var.get().strip():
                     messagebox.showerror(
                         "错误",
                         f"表 {card.table_name} SQL 模式必须指定 chunk_key",
