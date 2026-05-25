@@ -12,6 +12,49 @@ class TransferMode(Enum):
     STREAM = "stream"
 
 
+class SplitMode(Enum):
+    """分块拆分模式枚举。"""
+
+    CALENDAR = "calendar"
+    PARTITION_VALUE = "partition_value"
+    PHYSICAL_PARTITION = "physical"
+    KEY_RANGE = "key_range"
+
+
+class BindType(Enum):
+    """分块条件绑定方式枚举。"""
+
+    COLUMN = "column"
+    EXPRESSION = "expression"
+    NAME_TEMPLATE = "name_template"
+    METADATA_LIST = "metadata_list"
+
+
+@dataclass
+class SplitConfig:
+    """分块拆分策略配置。"""
+
+    mode: SplitMode = SplitMode.PARTITION_VALUE
+    range_start: str = ""
+    range_end: str = ""
+    value_format: Literal["yyyy-MM-dd", "yyyyMMdd", "yyyyMM", "yyyy"] = "yyyyMMdd"
+    granularity: Literal["day", "month", "year"] = "day"
+    bind_type: BindType = BindType.COLUMN
+    bind_target: str = ""
+    batch_size: int = 1
+    extra_where: str = ""
+
+
+@dataclass
+class MemoryBudgetConfig:
+    """流式迁移内存预算与批量行数约束。"""
+
+    limit_mb: int = 512
+    sample_rows: int = 100
+    min_batch_rows: int = 100
+    max_batch_rows: int = 100_000
+
+
 @dataclass
 class MigrationCondition:
     """单个表的迁移条件与分块配置。"""
@@ -25,6 +68,7 @@ class MigrationCondition:
     chunk_key: str = ""
     chunk_size: int = 100_000
     enabled: bool = True
+    split: SplitConfig = field(default_factory=SplitConfig)
 
 
 @dataclass
@@ -32,6 +76,9 @@ class ChunkSpec:
     """单个分块的键值范围描述。"""
 
     chunk_index: int
+    label: str = ""
+    where_sql: str = ""
+    physical_targets: list[str] = field(default_factory=list)
     key_start: Any = None
     key_end: Any = None
 

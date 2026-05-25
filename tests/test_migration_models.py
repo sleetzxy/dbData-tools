@@ -149,3 +149,54 @@ def test_migration_meta_with_completed_chunks() -> None:
     assert meta.completed_chunks["orders"] == {0}
     assert meta.migration_id == "test-2"
     assert len(meta.tables) == 1
+
+
+def test_split_config_defaults() -> None:
+    from core.migration.models import SplitConfig, SplitMode
+
+    cfg = SplitConfig()
+    assert cfg.mode == SplitMode.PARTITION_VALUE
+    assert cfg.batch_size == 1
+
+
+def test_chunk_spec_has_label_and_where_sql() -> None:
+    from core.migration.models import ChunkSpec
+
+    c = ChunkSpec(chunk_index=0, label="20240601~20240607", where_sql="p >= 1")
+    assert c.physical_targets == []
+
+
+def test_split_mode_values() -> None:
+    from core.migration.models import SplitMode
+
+    assert SplitMode.CALENDAR.value == "calendar"
+    assert SplitMode.PARTITION_VALUE.value == "partition_value"
+    assert SplitMode.PHYSICAL_PARTITION.value == "physical"
+    assert SplitMode.KEY_RANGE.value == "key_range"
+
+
+def test_bind_type_values() -> None:
+    from core.migration.models import BindType
+
+    assert BindType.COLUMN.value == "column"
+    assert BindType.EXPRESSION.value == "expression"
+    assert BindType.NAME_TEMPLATE.value == "name_template"
+    assert BindType.METADATA_LIST.value == "metadata_list"
+
+
+def test_memory_budget_config_defaults() -> None:
+    from core.migration.models import MemoryBudgetConfig
+
+    cfg = MemoryBudgetConfig()
+    assert cfg.limit_mb == 512
+    assert cfg.sample_rows == 100
+    assert cfg.min_batch_rows == 100
+    assert cfg.max_batch_rows == 100_000
+
+
+def test_migration_condition_has_split_default() -> None:
+    from core.migration.models import MigrationCondition, SplitConfig, SplitMode
+
+    cond = MigrationCondition(table_name="users", mode="where")
+    assert isinstance(cond.split, SplitConfig)
+    assert cond.split.mode == SplitMode.PARTITION_VALUE
