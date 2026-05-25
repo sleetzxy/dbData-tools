@@ -39,6 +39,7 @@ def _meta_to_dict(meta: MigrationMeta) -> dict[str, Any]:
         "completed_chunks": {
             k: sorted(v) for k, v in meta.completed_chunks.items()
         },
+        "chunk_labels": meta.chunk_labels,
         "created_at": meta.created_at,
     }
 
@@ -53,6 +54,10 @@ def _dict_to_meta(data: dict[str, Any]) -> MigrationMeta:
         tables=[MigrationCondition(**t) for t in data["tables"]],
         completed_chunks={
             k: set(v) for k, v in data["completed_chunks"].items()
+        },
+        chunk_labels={
+            k: {int(idx): label for idx, label in v.items()}
+            for k, v in data.get("chunk_labels", {}).items()
         },
         created_at=data["created_at"],
     )

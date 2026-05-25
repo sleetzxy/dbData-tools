@@ -12,6 +12,7 @@ from core.migration.models import (
     ChunkSpec,
     MigrationCondition,
     MigrationMeta,
+    TransferMode,
 )
 from core.migration.orchestrator import MigrationOrchestrator
 
@@ -143,6 +144,7 @@ def make_orchestrator() -> Any:
         progress_callback: Any = None,
         src_adapter: Any = None,
         dst_adapter: Any = None,
+        transfer_mode: TransferMode = TransferMode.CSV,
     ) -> MigrationOrchestrator:
         if conditions is None:
             conditions = [
@@ -183,6 +185,7 @@ def make_orchestrator() -> Any:
             progress_callback=progress_callback,
             src_adapter=src_adapter,
             dst_adapter=dst_adapter,
+            transfer_mode=transfer_mode,
         )
 
     return _build

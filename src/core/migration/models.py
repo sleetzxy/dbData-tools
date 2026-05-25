@@ -114,4 +114,5 @@ class MigrationMeta:
     migration_id: str
     tables: list[MigrationCondition]
     completed_chunks: dict[str, set[int]] = field(default_factory=dict)
+    chunk_labels: dict[str, dict[int, str]] = field(default_factory=dict)
     created_at: str = ""

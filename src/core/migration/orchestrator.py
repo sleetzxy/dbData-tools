@@ -11,16 +11,24 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
-from core.migration.chunk_strategy import compute_chunks, detect_chunk_key
+from core.migration.chunk_strategy import compute_chunks
+from core.migration.memory_budget import MemoryBudget
 from core.migration.models import (
+    BindType,
     ChunkProgress,
     ChunkSpec,
     MigrationCondition,
     MigrationMeta,
+    SplitMode,
     TableMigrationResult,
     TransferMode,
 )
 from core.migration.resume_manager import ResumeManager
+from core.migration.split_strategy import (
+    compute_split_chunks,
+    compute_split_chunks_with_client,
+)
+from core.migration.transfer_pipeline import TransferPipeline
 from db.adapters import get_adapter_for_config
 
 logger = logging.getLogger("migrate.orchestrator")
@@ -56,7 +64,8 @@ class MigrationOrchestrator:
         progress_callback: Callable[[ChunkProgress], None] | None = None,
         src_adapter: Any = None,
         dst_adapter: Any = None,
-        transfer_mode: TransferMode = TransferMode.CSV,
+        transfer_mode: TransferMode = TransferMode.STREAM,
+        memory_budget: MemoryBudget | None = None,
         stream_batch_size: int = 10000,
     ) -> None:
         self.src_config = src_config
@@ -71,6 +80,7 @@ class MigrationOrchestrator:
         self.dst_adapter = dst_adapter or get_adapter_for_config(dst_config)
         self.resume_mgr = ResumeManager()
         self.transfer_mode = transfer_mode
+        self.memory_budget = memory_budget
         self.stream_batch_size = stream_batch_size
 
         # 解析 schema：PG 默认 "public"，CH 用配置中的 schema 或空串
@@ -126,7 +136,20 @@ class MigrationOrchestrator:
             src_client = self.src_adapter.create_client(self.src_config)
             dst_client = self.dst_adapter.create_client(self.dst_config)
 
-            temp_dir = tempfile.mkdtemp(prefix="db_migrate_")
+            if self.transfer_mode == TransferMode.CSV:
+                temp_dir = tempfile.mkdtemp(prefix="db_migrate_")
+
+            pipeline = TransferPipeline(
+                src_adapter=self.src_adapter,
+                dst_adapter=self.dst_adapter,
+                src_config=self.src_config,
+                dst_config=self.dst_config,
+                src_schema=self.src_schema,
+                dst_schema=self.dst_schema,
+                transfer_mode=self.transfer_mode,
+                memory_budget=self.memory_budget,
+                logger=self.logger,
+            )
 
             # 预先计算总块数（用于进度回传）
             total_across_all = self._count_total_chunks(src_client)
@@ -142,6 +165,7 @@ class MigrationOrchestrator:
                     src_client=src_client,
                     dst_client=dst_client,
                     meta=meta,
+                    pipeline=pipeline,
                     temp_dir=temp_dir,
                     total_across_all=total_across_all,
                     completed_across=completed_across,
@@ -183,27 +207,50 @@ class MigrationOrchestrator:
     # 分块迁移
     # ------------------------------------------------------------------
 
+    def _compute_chunks(
+        self,
+        client: Any,
+        cond: MigrationCondition,
+    ) -> list[ChunkSpec]:
+        """根据 split 配置或 legacy KEY_RANGE 策略生成分块列表。"""
+        split = cond.split
+        has_range = bool(split.range_start.strip() and split.range_end.strip())
+
+        if split.mode != SplitMode.KEY_RANGE and has_range:
+            if (
+                split.mode == SplitMode.PHYSICAL_PARTITION
+                and split.bind_type == BindType.METADATA_LIST
+            ):
+                return compute_split_chunks_with_client(
+                    split, self.src_adapter, client, self.src_schema,
+                )
+            return compute_split_chunks(split)
+
+        return compute_chunks(
+            self.src_adapter, client, cond.table_name, cond, self.src_schema,
+        )
+
     def _migrate_table(
         self,
         cond: MigrationCondition,
         src_client: Any,
         dst_client: Any,
         meta: MigrationMeta,
-        temp_dir: str,
+        pipeline: TransferPipeline,
+        temp_dir: str | None,
         total_across_all: int,
         completed_across: int,
         resume_mode: bool,
     ) -> TableMigrationResult:
         """迁移单张表（分块执行）。"""
-        chunks = compute_chunks(
-            self.src_adapter, src_client, cond.table_name, cond, self.src_schema,
-        )
+        chunks = self._compute_chunks(src_client, cond)
         total_chunks = len(chunks)
         completed_chunks_count = 0
         total_rows = 0
         last_error = ""
 
         completed_set = meta.completed_chunks.get(cond.table_name, set())
+        target_table = cond.target_table or cond.table_name
 
         for chunk in chunks:
             chunk_index = chunk.chunk_index
@@ -215,34 +262,27 @@ class MigrationOrchestrator:
                 )
                 continue
 
-            # 重试循环（导出 + 导入作为一个原子单元）
-            csv_path: str | None = None
+            do_truncate = self._resolve_truncate(chunk_index == 0)
+            if (
+                do_truncate
+                and self.transfer_mode == TransferMode.STREAM
+            ):
+                self._truncate_target(dst_client, target_table)
+
+            # 重试循环（传输作为一个原子单元）
             rows_in_chunk = 0
             chunk_ok = False
             for attempt in range(_MAX_RETRIES + 1):
                 try:
-                    if self.transfer_mode == TransferMode.STREAM:
-                        target = cond.target_table or cond.table_name
-                        if self._resolve_truncate(chunk_index == 0):
-                            self._truncate_target(dst_client, target)
-                        rows_in_chunk = self._stream_chunk(
-                            cond=cond, src_client=src_client, dst_client=dst_client,
-                            chunk=chunk, target_table=target,
-                        )
-                    else:
-                        csv_path, rows_in_chunk = self._export_chunk(
-                            cond=cond,
-                            src_client=src_client,
-                            chunk=chunk,
-                            temp_dir=temp_dir,
-                        )
-                        is_first = chunk_index == 0
-                        self._import_chunk(
-                            cond=cond,
-                            dst_client=dst_client,
-                            csv_path=csv_path,
-                            is_first_chunk=is_first,
-                        )
+                    rows_in_chunk = pipeline.transfer_chunk(
+                        src_client=src_client,
+                        dst_client=dst_client,
+                        cond=cond,
+                        chunk=chunk,
+                        target_table=target_table,
+                        truncate=do_truncate,
+                        temp_dir=temp_dir,
+                    )
                     chunk_ok = True
                     break  # 成功，退出重试循环
                 except Exception as exc:
@@ -252,7 +292,6 @@ class MigrationOrchestrator:
                             cond.table_name, chunk_index, _MAX_RETRIES, exc,
                         )
                         last_error = str(exc)
-                        csv_path = None
                     else:
                         wait = 2**attempt
                         self.logger.warning(
@@ -270,6 +309,10 @@ class MigrationOrchestrator:
 
             # 更新断点
             meta.completed_chunks.setdefault(cond.table_name, set()).add(chunk_index)
+            if chunk.label:
+                meta.chunk_labels.setdefault(cond.table_name, {})[
+                    chunk_index
+                ] = chunk.label
             try:
                 self.resume_mgr.save(meta)
             except Exception as exc:
@@ -295,9 +338,14 @@ class MigrationOrchestrator:
                 except Exception as exc:
                     self.logger.warning("进度回调异常: %s", exc)
 
-            # 清理分块临时文件
-            if csv_path:
-                self._cleanup_chunk_csv(csv_path)
+            # 清理分块临时文件（CSV 模式）
+            if temp_dir is not None:
+                chunk_dir = os.path.join(
+                    temp_dir,
+                    cond.table_name,
+                    f"chunk_{chunk_index:06d}",
+                )
+                self._cleanup_chunk_dir(chunk_dir)
 
         success = not last_error
         return TableMigrationResult(
@@ -307,171 +355,6 @@ class MigrationOrchestrator:
             total_chunks=total_chunks,
             completed_chunks=completed_chunks_count,
             error=last_error,
-        )
-
-    # ------------------------------------------------------------------
-    # 导出 / 导入
-    # ------------------------------------------------------------------
-
-    def _export_chunk(
-        self,
-        cond: MigrationCondition,
-        src_client: Any,
-        chunk: ChunkSpec,
-        temp_dir: str,
-    ) -> tuple[str, int]:
-        """导出单个分块为 CSV 文件。
-
-        :return: ``(csv_path, row_count)`` 元组。
-        :raises RuntimeError: 导出失败时抛出。
-        :raises FileNotFoundError: 导出的 CSV 文件不存在时抛出。
-        """
-        # 每个分块使用独立的临时子目录
-        chunk_dir = os.path.join(
-            temp_dir, cond.table_name, f"chunk_{chunk.chunk_index:06d}",
-        )
-        os.makedirs(chunk_dir, exist_ok=True)
-
-        # 检测分块键
-        chunk_key = cond.chunk_key
-        if not chunk_key:
-            chunk_key = detect_chunk_key(
-                self.src_adapter, src_client, cond.table_name, self.src_schema,
-            )
-
-        result = self.src_adapter.export_csv(
-            client=src_client,
-            db_config=self.src_config,
-            table=cond.table_name,
-            export_dir=chunk_dir,
-            schema=self.src_schema,
-            include_header=True,
-            where_clause=cond.where_clause,
-            custom_sql=cond.custom_sql,
-            chunk_key=chunk_key,
-            chunk_start=chunk.key_start,
-            chunk_end=chunk.key_end,
-            logger=self.logger,
-        )
-
-        if not result.get("success"):
-            error_msg = result.get("error") or ""
-            if not error_msg:
-                tables_with_error = result.get("error_tables") or []
-                if tables_with_error:
-                    error_msg = tables_with_error[0].get("error", "")
-            if not error_msg:
-                error_msg = "未知导出错误"
-            raise RuntimeError(f"导出分块失败: {error_msg}")
-
-        csv_path = os.path.join(chunk_dir, f"{cond.table_name}.csv")
-        if not os.path.isfile(csv_path):
-            raise FileNotFoundError(f"导出后未找到 CSV 文件: {csv_path}")
-
-        row_count = result.get("total_rows", 0)
-        return csv_path, row_count
-
-    def _import_chunk(
-        self,
-        cond: MigrationCondition,
-        dst_client: Any,
-        csv_path: str,
-        is_first_chunk: bool,
-    ) -> None:
-        """导入 CSV 文件到目标表。
-
-        :param csv_path: CSV 文件的完整路径。
-        :param is_first_chunk: 是否为该表的首个分块。
-        :raises RuntimeError: 导入失败时抛出。
-        """
-        data_dir = os.path.dirname(csv_path)
-        do_truncate = self._resolve_truncate(is_first_chunk)
-
-        target_table = cond.target_table or cond.table_name
-        result = self.dst_adapter.import_csv(
-            client=dst_client,
-            db_config=self.dst_config,
-            table_names=[target_table],
-            data_dir=data_dir,
-            schema=self.dst_schema,
-            truncate_before=do_truncate,
-            is_first_chunk=is_first_chunk,
-            logger=self.logger,
-        )
-
-        if not result.get("success"):
-            error_msg = result.get("error") or ""
-            if not error_msg:
-                tables_with_error = result.get("error_tables") or []
-                if tables_with_error:
-                    error_msg = tables_with_error[0].get("error", "")
-            if not error_msg:
-                error_msg = "未知导入错误"
-            raise RuntimeError(f"导入分块失败: {error_msg}")
-
-    # ------------------------------------------------------------------
-    # 流式传输
-    # ------------------------------------------------------------------
-
-    def _stream_chunk(
-        self,
-        cond: MigrationCondition,
-        src_client: Any,
-        dst_client: Any,
-        chunk: ChunkSpec,
-        target_table: str,
-    ) -> int:
-        """Transfer a single chunk from source to target via memory (no disk I/O).
-
-        :return: Number of rows transferred.
-        :raises RuntimeError: If transfer fails.
-        """
-        chunk_key = cond.chunk_key
-        if not chunk_key:
-            chunk_key = detect_chunk_key(
-                self.src_adapter, src_client, cond.table_name, self.src_schema,
-            )
-
-        # Build source query (reuse existing adapter method)
-        src_query = self.src_adapter._build_chunked_query(
-            table=cond.table_name,
-            schema=self.src_schema,
-            where_clause=cond.where_clause,
-            custom_sql=cond.custom_sql,
-            chunk_key=chunk_key,
-            chunk_start=chunk.key_start,
-            chunk_end=chunk.key_end,
-        )
-
-        # Convert query object to string
-        if hasattr(src_query, 'as_string'):
-            query_str = src_query.as_string(src_client)
-        else:
-            query_str = str(src_query)
-
-        if self._can_use_copy_pipe():
-            columns = self.dst_adapter.get_table_columns(
-                dst_client, target_table, self.dst_schema,
-            )
-            return self.src_adapter.copy_stream_transfer(
-                src_client, dst_client,
-                query_str,
-                target_table, columns, self.dst_schema,
-            )
-        else:
-            col_names, rows_iter = self.src_adapter.stream_read(
-                src_client, query_str, self.stream_batch_size,
-            )
-            return self.dst_adapter.stream_write(
-                dst_client, target_table, col_names, rows_iter, self.dst_schema,
-            )
-
-    def _can_use_copy_pipe(self) -> bool:
-        """Check if source and destination support PG-to-PG COPY pipe."""
-        return (
-            self.src_adapter.db_type == "postgresql"
-            and self.dst_adapter.db_type == "postgresql"
-            and hasattr(self.src_adapter, "copy_stream_transfer")
         )
 
     # ------------------------------------------------------------------
@@ -492,8 +375,8 @@ class MigrationOrchestrator:
         """Truncate target table before migrating first chunk."""
         self.logger.info("TRUNCATE 目标表 %s.%s", self.dst_schema, target_table)
         if self.dst_adapter.db_type == "postgresql":
-            import psycopg2
             from psycopg2 import sql as psql
+
             with dst_client.cursor() as cursor:
                 cursor.execute(
                     psql.SQL("TRUNCATE TABLE {}.{}").format(
@@ -521,9 +404,7 @@ class MigrationOrchestrator:
             if not cond.enabled:
                 continue
             try:
-                chunks = compute_chunks(
-                    self.src_adapter, client, cond.table_name, cond, self.src_schema,
-                )
+                chunks = self._compute_chunks(client, cond)
                 total += len(chunks)
             except Exception as exc:
                 self.logger.warning("计算表 %s 分块数时出错: %s", cond.table_name, exc)
@@ -536,12 +417,11 @@ class MigrationOrchestrator:
         return sum(len(v) for v in meta.completed_chunks.values())
 
     @staticmethod
-    def _cleanup_chunk_csv(csv_path: str) -> None:
+    def _cleanup_chunk_dir(chunk_dir: str) -> None:
         """清理分块的临时文件目录。"""
-        data_dir = os.path.dirname(csv_path)
         try:
-            if os.path.isdir(data_dir):
-                shutil.rmtree(data_dir, ignore_errors=True)
+            if os.path.isdir(chunk_dir):
+                shutil.rmtree(chunk_dir, ignore_errors=True)
         except Exception:
             pass  # 清理失败不影响主流程
 
