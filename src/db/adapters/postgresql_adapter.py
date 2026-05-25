@@ -61,6 +61,29 @@ class PostgreSQLAdapter:
             )
             return [row[0] for row in cursor]
 
+    def list_partitions(
+        self,
+        client: psycopg2.extensions.connection,
+        parent_table: str,
+        schema: str = "public",
+    ) -> list[str]:
+        """Return child table names inherited from ``parent_table``."""
+        cleaned = str(parent_table).strip()
+        if not cleaned or "\x00" in cleaned:
+            raise ValueError(f"Invalid table identifier: {parent_table}")
+        with client.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT c.relname FROM pg_inherits i
+                JOIN pg_class c ON c.oid = i.inhrelid
+                JOIN pg_class p ON p.oid = i.inhparent
+                JOIN pg_namespace n ON n.oid = p.relnamespace
+                WHERE p.relname = %s AND n.nspname = %s
+                """,
+                (cleaned, schema),
+            )
+            return [row[0] for row in cursor.fetchall()]
+
     def stream_read(
         self,
         client: psycopg2.extensions.connection,

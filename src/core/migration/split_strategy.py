@@ -5,7 +5,7 @@ from __future__ import annotations
 import calendar
 import re
 from datetime import date, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from core.migration.models import BindType, ChunkSpec, SplitConfig, SplitMode
 
@@ -33,6 +33,52 @@ def compute_split_chunks(cfg: SplitConfig) -> list[ChunkSpec]:
         return _compute_physical_chunks(cfg)
 
     raise ValueError(f"unsupported split mode: {cfg.mode}")
+
+
+def compute_split_chunks_with_client(
+    cfg: SplitConfig,
+    adapter: Any,
+    client: Any,
+    schema: str,
+) -> list[ChunkSpec]:
+    """Generate chunks, querying partition metadata when required."""
+    if (
+        cfg.mode == SplitMode.PHYSICAL_PARTITION
+        and cfg.bind_type == BindType.METADATA_LIST
+    ):
+        _validate_range(cfg)
+        if not cfg.bind_target.strip():
+            raise ValueError("bind_target parent table is required")
+
+        names = list_physical_partitions(
+            adapter,
+            client,
+            cfg.bind_target,
+            schema,
+            cfg.range_start,
+            cfg.range_end,
+            cfg.value_format,
+        )
+        return _build_physical_chunks_from_names(cfg, names)
+
+    return compute_split_chunks(cfg)
+
+
+def list_physical_partitions(
+    adapter: Any,
+    client: Any,
+    parent_table: str,
+    schema: str,
+    range_start: str,
+    range_end: str,
+    value_format: str,
+) -> list[str]:
+    """List physical partition names within ``range_start``..``range_end``."""
+    raw_names = adapter.list_partitions(client, parent_table, schema)
+    start = parse_range_value(range_start, value_format)  # type: ignore[arg-type]
+    end = parse_range_value(range_end, value_format)  # type: ignore[arg-type]
+    filtered = _filter_partition_names(raw_names, start, end, value_format)  # type: ignore[arg-type]
+    return sorted(filtered)
 
 
 def merge_extra_where(where_sql: str, extra_where: str) -> str:
@@ -157,7 +203,8 @@ def _compute_partition_value_chunks(cfg: SplitConfig) -> list[ChunkSpec]:
 def _compute_physical_chunks(cfg: SplitConfig) -> list[ChunkSpec]:
     if cfg.bind_type != BindType.NAME_TEMPLATE:
         raise NotImplementedError(
-            "PHYSICAL_PARTITION with METADATA_LIST is handled in Task 3"
+            "PHYSICAL_PARTITION with METADATA_LIST requires "
+            "compute_split_chunks_with_client"
         )
     if not cfg.bind_target.strip():
         raise ValueError("bind_target template is required")
@@ -170,6 +217,13 @@ def _compute_physical_chunks(cfg: SplitConfig) -> list[ChunkSpec]:
         names.append(_render_template(cfg.bind_target, cursor, cfg.value_format))
         cursor += timedelta(days=1)
 
+    return _build_physical_chunks_from_names(cfg, names)
+
+
+def _build_physical_chunks_from_names(
+    cfg: SplitConfig,
+    names: list[str],
+) -> list[ChunkSpec]:
     chunks: list[ChunkSpec] = []
     batch = max(cfg.batch_size, 1)
     for index in range(0, len(names), batch):
@@ -185,6 +239,35 @@ def _compute_physical_chunks(cfg: SplitConfig) -> list[ChunkSpec]:
             )
         )
     return chunks
+
+
+def _filter_partition_names(
+    names: list[str],
+    range_start: date | int,
+    range_end: date | int,
+    value_format: ValueFormat,
+) -> list[str]:
+    filtered: list[str] = []
+    for name in names:
+        bound = _extract_partition_bound(name, value_format)
+        if bound is None:
+            continue
+        if _compare_values(range_start, bound) <= 0 and _compare_values(bound, range_end) <= 0:
+            filtered.append(name)
+    return filtered
+
+
+def _extract_partition_bound(name: str, fmt: ValueFormat) -> date | int | None:
+    candidates = [name]
+    if "_" in name:
+        candidates.append(name.rsplit("_", 1)[-1])
+
+    for candidate in candidates:
+        try:
+            return parse_range_value(candidate, fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def _build_chunks_from_intervals(

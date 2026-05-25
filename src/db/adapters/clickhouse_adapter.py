@@ -33,6 +33,26 @@ class ClickHouseAdapter:
         )
         return [row[0] for row in result.result_rows]
 
+    def list_partitions(
+        self,
+        client: Any,
+        parent_table: str,
+        schema: str = "",
+    ) -> list[str]:
+        """Return distinct partition ids for ``parent_table`` from system.parts."""
+        table_str = self._validate_identifier(parent_table, "table")
+        db_name = (
+            self._validate_identifier(schema, "database")
+            if schema
+            else client.database
+        )
+        result = client.query(
+            "SELECT DISTINCT partition FROM system.parts "
+            "WHERE database = %(db)s AND table = %(table)s",
+            parameters={"db": db_name, "table": table_str},
+        )
+        return [row[0] for row in result.result_rows]
+
     @classmethod
     def _validate_identifier(cls, name: str, label: str) -> str:
         cleaned = name.strip()

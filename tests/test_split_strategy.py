@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from core.migration.models import BindType, SplitConfig, SplitMode
-from core.migration.split_strategy import compute_split_chunks, merge_extra_where
+from core.migration.split_strategy import (
+    compute_split_chunks,
+    compute_split_chunks_with_client,
+    list_physical_partitions,
+    merge_extra_where,
+)
 
 
 def test_compute_calendar_chunks_june_daily_batch7() -> None:
@@ -124,3 +131,106 @@ def test_key_range_raises_not_implemented() -> None:
     cfg = SplitConfig(mode=SplitMode.KEY_RANGE)
     with pytest.raises(NotImplementedError, match="KEY_RANGE"):
         compute_split_chunks(cfg)
+
+
+def test_list_physical_partitions_clickhouse_filters_range() -> None:
+    """ClickHouse partitions are filtered by numeric yyyyMMdd range."""
+    adapter = MagicMock()
+    adapter.db_type = "clickhouse"
+    adapter.list_partitions.return_value = [
+        "20240531",
+        "20240601",
+        "20240602",
+        "20240603",
+        "20240701",
+    ]
+    client = MagicMock()
+
+    result = list_physical_partitions(
+        adapter,
+        client,
+        "orders",
+        "mydb",
+        "20240601",
+        "20240602",
+        "yyyyMMdd",
+    )
+
+    assert result == ["20240601", "20240602"]
+    adapter.list_partitions.assert_called_once_with(client, "orders", "mydb")
+
+
+def test_list_physical_partitions_postgresql_suffix_match() -> None:
+    """PostgreSQL child tables match via numeric suffix like orders_20240601."""
+    adapter = MagicMock()
+    adapter.db_type = "postgresql"
+    adapter.list_partitions.return_value = [
+        "orders_20240531",
+        "orders_20240601",
+        "orders_20240602",
+        "other",
+    ]
+    client = MagicMock()
+
+    result = list_physical_partitions(
+        adapter,
+        client,
+        "orders",
+        "public",
+        "20240601",
+        "20240602",
+        "yyyyMMdd",
+    )
+
+    assert result == ["orders_20240601", "orders_20240602"]
+    adapter.list_partitions.assert_called_once_with(client, "orders", "public")
+
+
+def test_compute_split_chunks_with_client_metadata_list_batches() -> None:
+    """METADATA_LIST mode queries partitions and batches into ChunkSpec."""
+    adapter = MagicMock()
+    adapter.list_partitions.return_value = [
+        "20240601",
+        "20240602",
+        "20240603",
+        "20240604",
+    ]
+    client = MagicMock()
+
+    cfg = SplitConfig(
+        mode=SplitMode.PHYSICAL_PARTITION,
+        range_start="20240601",
+        range_end="20240604",
+        value_format="yyyyMMdd",
+        bind_type=BindType.METADATA_LIST,
+        bind_target="orders",
+        batch_size=2,
+    )
+    chunks = compute_split_chunks_with_client(cfg, adapter, client, "mydb")
+
+    assert len(chunks) == 2
+    assert chunks[0].physical_targets == ["20240601", "20240602"]
+    assert chunks[0].label == "20240601~20240602"
+    assert chunks[1].physical_targets == ["20240603", "20240604"]
+    assert chunks[1].label == "20240603~20240604"
+    adapter.list_partitions.assert_called_once_with(client, "orders", "mydb")
+
+
+def test_compute_split_chunks_with_client_delegates_to_compute_split_chunks() -> None:
+    """Non-METADATA_LIST modes delegate without adapter queries."""
+    adapter = MagicMock()
+    client = MagicMock()
+
+    cfg = SplitConfig(
+        mode=SplitMode.PARTITION_VALUE,
+        range_start="20240601",
+        range_end="20240607",
+        value_format="yyyyMMdd",
+        bind_type=BindType.COLUMN,
+        bind_target="p_date",
+        batch_size=7,
+    )
+    chunks = compute_split_chunks_with_client(cfg, adapter, client, "public")
+
+    assert len(chunks) == 1
+    adapter.list_partitions.assert_not_called()
