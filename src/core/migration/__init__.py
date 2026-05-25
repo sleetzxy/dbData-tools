@@ -19,6 +19,7 @@ from core.migration.memory_budget import MemoryBudget
 from core.migration.orchestrator import MigrationOrchestrator
 from core.migration.resume_manager import ResumeManager
 from core.migration.split_strategy import compute_split_chunks
+from core.migration.transfer_pipeline import TransferPipeline
 
 __all__ = [
     "BindType",
@@ -34,6 +35,7 @@ __all__ = [
     "SplitMode",
     "TableMigrationResult",
     "TransferMode",
+    "TransferPipeline",
     "compute_chunks",
     "compute_split_chunks",
     "detect_chunk_key",
