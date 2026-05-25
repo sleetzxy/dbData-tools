@@ -15,6 +15,7 @@ from core.migration.models import (
     TableMigrationResult,
     TransferMode,
 )
+from core.migration.memory_budget import MemoryBudget
 from core.migration.orchestrator import MigrationOrchestrator
 from core.migration.resume_manager import ResumeManager
 from core.migration.split_strategy import compute_split_chunks
@@ -23,6 +24,7 @@ __all__ = [
     "BindType",
     "ChunkProgress",
     "ChunkSpec",
+    "MemoryBudget",
     "MemoryBudgetConfig",
     "MigrationCondition",
     "MigrationMeta",
