@@ -49,18 +49,17 @@ docs: 重写仓库协作说明
 
 当 AI 参与起草、重构或生成代码时，在 Footer 标注工具与合著者信息。
 
-### 获取提交人身份（生成 Co-authored-by 前必做）
+### 确定实际代码编写者（生成 Co-authored-by 前必做）
 
-**禁止**使用占位符（如 `提交人姓名`、`<email>`、示例邮箱）。生成 commit message 前，**必须先执行**：
+**Co-authored-by** 标注**实际编写本次变更代码**的合著者，**不是**默认填入执行 `git commit` 的 Git 提交人（Author 已由 git 自动记录）。
 
-```bash
-git config user.name
-git config user.email
-```
+**禁止**使用占位符（如 `提交人姓名`、`<email>`、示例邮箱）。
 
-- 将上述命令的**实际输出**填入 `Co-authored-by: <name> <email>`（格式：`姓名 <邮箱>`）。
-- 上述命令无输出时，再依次尝试 `git config --global user.name` / `git config --global user.email`。
-- 若仍无法取得有效姓名或邮箱，**暂停提交**并向用户确认，不得臆造或沿用文档示例值。
+- **AI 参与写代码**：必须添加对应工具的 `Co-authored-by`，例如：
+  - Cursor：`Co-authored-by: Cursor <cursoragent@cursor.com>`
+  - Claude Code：`Co-authored-by: Claude Code <noreply@anthropic.com>`
+- **纯人工编写**（AI 仅润色 commit message）：无需 `Co-authored-by`。
+- **多人协作写代码**：每行一人，仅列实际写代码者；姓名与邮箱须真实有效，不知晓时向用户确认，不得臆造。
 
 ### 示例
 
@@ -71,15 +70,15 @@ feat(auth): add jwt refresh token flow
 - AI drafted initial refresh flow; human reviewed edge cases.
 
 AI-Assisted-by: Claude Code
-Co-authored-by: Zhang San <zhangsan@company.com>
+Co-authored-by: Claude Code <noreply@anthropic.com>
 ```
 
-上例中 `Co-authored-by` 的姓名与邮箱须替换为 `git config` 的实际输出，**不得**照抄示例。
+上例中 AI 起草代码，`Co-authored-by` 标注实际代码编写者（AI），**不得**照抄为 Git 提交人身份。
 
 ### 约定
 
 - **AI-Assisted-by**：使用的工具或模型产品线名称。
-- **Co-authored-by**：符合 [Git trailer 格式](https://git-scm.com/docs/git-interpret-trailers)；**每行一人**。**必须**包含本次 Git 提交人（与 `git config user.name` / `user.email` 一致，通常即 Author）；另有真实合著者可追加多行。
+- **Co-authored-by**：符合 [Git trailer 格式](https://git-scm.com/docs/git-interpret-trailers)；**每行一人**。**必须**标注**实际编写代码**的主体（AI 或人工合著者），而非 Git 提交人。
 
 若 AI **仅**参与 commit message 润色、**未**参与代码：Body 末行写 `AI used only for commit message wording.`
 
