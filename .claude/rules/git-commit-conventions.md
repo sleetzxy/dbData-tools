@@ -47,14 +47,41 @@ docs: 重写仓库协作说明
 
 ## AI 辅助提交
 
-当 AI 参与起草、重构或生成代码时，在 Footer 标注：
+当 AI 参与起草、重构或生成代码时，在 Footer 标注工具与合著者信息。
+
+### 获取提交人身份（生成 Co-authored-by 前必做）
+
+**禁止**使用占位符（如 `提交人姓名`、`<email>`、示例邮箱）。生成 commit message 前，**必须先执行**：
+
+```bash
+git config user.name
+git config user.email
+```
+
+- 将上述命令的**实际输出**填入 `Co-authored-by: <name> <email>`（格式：`姓名 <邮箱>`）。
+- 上述命令无输出时，再依次尝试 `git config --global user.name` / `git config --global user.email`。
+- 若仍无法取得有效姓名或邮箱，**暂停提交**并向用户确认，不得臆造或沿用文档示例值。
+
+### 示例
 
 ```
+feat(auth): add jwt refresh token flow
+
+- Refactor session handling for clearer token lifecycle.
+- AI drafted initial refresh flow; human reviewed edge cases.
+
 AI-Assisted-by: Claude Code
-Co-authored-by: 提交人姓名 <email>  <!-- 真实提交人，非 AI -->
+Co-authored-by: Zhang San <zhangsan@company.com>
 ```
 
-若 AI 仅参与 commit message 润色，未参与代码：Body 末行写 `AI used only for commit message wording.`
+上例中 `Co-authored-by` 的姓名与邮箱须替换为 `git config` 的实际输出，**不得**照抄示例。
+
+### 约定
+
+- **AI-Assisted-by**：使用的工具或模型产品线名称。
+- **Co-authored-by**：符合 [Git trailer 格式](https://git-scm.com/docs/git-interpret-trailers)；**每行一人**。**必须**包含本次 Git 提交人（与 `git config user.name` / `user.email` 一致，通常即 Author）；另有真实合著者可追加多行。
+
+若 AI **仅**参与 commit message 润色、**未**参与代码：Body 末行写 `AI used only for commit message wording.`
 
 ## 提交前检查
 

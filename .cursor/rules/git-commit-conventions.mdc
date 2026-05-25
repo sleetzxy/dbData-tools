@@ -49,7 +49,22 @@ alwaysApply: true
 
 当本次变更有 AI（如 Cursor）参与起草、重构建议或生成片段时，在 **Body** 中用条目写清**人工作出的关键修改**；在 **Footer** 用固定字段做**工具与批次追溯**（便于审计与合规）。
 
-示例（字段名可照搬，值按实际填写）：
+### 获取提交人身份（生成 Co-authored-by 前必做）
+
+**禁止**使用占位符（如 `提交人姓名`、`<email>`、示例邮箱）。生成 commit message 前，**必须先执行**：
+
+```bash
+git config user.name
+git config user.email
+```
+
+- 将上述命令的**实际输出**填入 `Co-authored-by: <name> <email>`（格式：`姓名 <邮箱>`）。
+- 上述命令无输出时，再依次尝试 `git config --global user.name` / `git config --global user.email`。
+- 若仍无法取得有效姓名或邮箱，**暂停提交**并向用户确认，不得臆造或沿用文档示例值。
+
+### 示例
+
+字段名可照搬，值须按 `git config` 实际输出填写：
 
 ```
 feat(auth): add jwt refresh token flow
@@ -60,10 +75,12 @@ feat(auth): add jwt refresh token flow
 
 AI-Assisted-by: Cursor
 Prompt-ID: PROMPT-AUTH-003
-Co-authored-by: Zhang San <zhangsan@company.com>  <!-- 真实提交人，非 AI -->
+Co-authored-by: Zhang San <zhangsan@company.com>
 ```
 
-约定：
+上例中 `Co-authored-by` 的姓名与邮箱须替换为 `git config` 的实际输出，**不得**照抄示例。
+
+### 约定
 
 - **AI-Assisted-by**：使用的工具或模型产品线名称（按团队清单填写）。
 - **Prompt-ID**：内部追踪 ID（无则可省略该行，勿编造）。
