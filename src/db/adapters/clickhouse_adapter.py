@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import os
+import re
 from collections.abc import Iterator, Sequence
 from datetime import datetime
 from typing import Any
 
 from core.importer_csv import generate_copy_commands, read_sql_from_file
 from db.exceptions import ClientCapabilityError
+
+
+_DEFAULT_REMOTE_SETTINGS: dict[str, Any] = {
+    "max_execution_time": 0,
+    "connect_timeout_with_failover_ms": 3000,
+    "receive_timeout": 3600,
+    "send_timeout": 3600,
+}
 
 
 class ClickHouseAdapter:
@@ -96,24 +107,43 @@ class ClickHouseAdapter:
         query: str,
         batch_size: int = 10000,
     ) -> tuple[list[str], Iterator[list[tuple]]]:
-        """Execute query, return (columns, batch iterator).
+        """Execute query via ``raw_stream`` and yield CSV rows in batches.
 
-        ``clickhouse-connect`` does not support server-side cursors, so the
-        entire result set is loaded into memory and then sliced into batches.
+        Uses ``FORMAT CSVWithNames`` and parses the byte stream incrementally
+        so the full result set is never loaded into memory.
 
-        :param client: Open ``clickhouse_connect`` client.
-        :param query: SQL SELECT statement.
+        :param client: Open ``clickhouse_connect`` client with ``raw_stream``.
+        :param query: SQL SELECT statement (without ``FORMAT`` clause).
         :param batch_size: Number of rows per batch (default 10 000).
         :returns: ``(columns, batch_iterator)`` where each batch is a list of
             row tuples.
+        :raises ClientCapabilityError: When ``client`` lacks ``raw_stream``.
         """
-        result = client.query(query)
-        columns = list(result.column_names)
-        all_rows: list[tuple] = list(result.result_rows)
+        if not hasattr(client, "raw_stream"):
+            raise ClientCapabilityError(
+                "ClickHouse client does not support raw_stream; "
+                "streaming read requires raw_stream."
+            )
+
+        csv_query = f"{query.rstrip().rstrip(';')} FORMAT CSVWithNames"
+        stream = client.raw_stream(csv_query)
+        text_io = io.TextIOWrapper(stream, encoding="utf-8", newline="")
+        reader = csv.reader(text_io)
+        columns = next(reader)
 
         def _batches() -> Iterator[list[tuple]]:
-            for i in range(0, len(all_rows), batch_size):
-                yield all_rows[i:i + batch_size]
+            batch: list[tuple] = []
+            try:
+                for row in reader:
+                    batch.append(tuple(row))
+                    if len(batch) >= batch_size:
+                        yield batch
+                        batch = []
+                if batch:
+                    yield batch
+            finally:
+                if hasattr(stream, "close"):
+                    stream.close()
 
         return columns, _batches()
 
@@ -149,6 +179,263 @@ class ClickHouseAdapter:
                 flat_values,
             )
             total += len(batch)
+        return total
+
+    @staticmethod
+    def _escape_ch_string(value: str) -> str:
+        """Escape a string for use inside ClickHouse single-quoted literals."""
+        return value.replace("\\", "\\\\").replace("'", "\\'")
+
+    @staticmethod
+    def _format_setting_value(value: Any) -> str:
+        """Format a ClickHouse SETTINGS value."""
+        if isinstance(value, bool):
+            return "1" if value else "0"
+        if isinstance(value, (int, float)):
+            return str(value)
+        escaped = str(value).replace("'", "\\'")
+        return f"'{escaped}'"
+
+    def _format_settings_clause(self, settings: dict[str, Any]) -> str:
+        """Return ``SETTINGS k=v, ...`` suffix for remote transfer SQL."""
+        parts = [
+            f"{key}={self._format_setting_value(val)}"
+            for key, val in settings.items()
+        ]
+        return f"SETTINGS {', '.join(parts)}"
+
+    @staticmethod
+    def _split_select_from(select_sql: str) -> tuple[str, str]:
+        """Split ``SELECT ... FROM ...`` into select clause and FROM remainder."""
+        match = re.search(r"\bFROM\b", select_sql, flags=re.IGNORECASE)
+        if match is None:
+            raise ValueError("select_sql must contain a FROM clause")
+        select_clause = select_sql[: match.start()].strip()
+        from_and_rest = select_sql[match.end() :].strip()
+        if not select_clause.upper().startswith("SELECT"):
+            raise ValueError("select_sql must start with SELECT")
+        return select_clause, from_and_rest
+
+    @staticmethod
+    def _parse_from_rest(from_and_rest: str) -> tuple[str, str]:
+        """Return ``(table_ref, suffix)`` from a FROM remainder."""
+        suffix_match = re.search(
+            r"\s+(?:PARTITION\s+|WHERE\s|ORDER\s|GROUP\s|HAVING\s|LIMIT\s|"
+            r"SETTINGS\s)",
+            from_and_rest,
+            flags=re.IGNORECASE,
+        )
+        if suffix_match is None:
+            return from_and_rest.strip(), ""
+        return (
+            from_and_rest[: suffix_match.start()].strip(),
+            from_and_rest[suffix_match.start() :].strip(),
+        )
+
+    @staticmethod
+    def _extract_table_name(table_ref: str) -> str:
+        """Extract bare table name from ``db.table`` or quoted identifiers."""
+        cleaned = table_ref.strip()
+        if "." in cleaned:
+            cleaned = cleaned.rsplit(".", maxsplit=1)[-1]
+        return cleaned.strip("`")
+
+    @staticmethod
+    def _append_partition(table_ref: str, partition: str | None) -> str:
+        """Append ``PARTITION 'name'`` after a table or remote() expression."""
+        if not partition:
+            return table_ref
+        return f"{table_ref} PARTITION '{partition}'"
+
+    def _apply_partition_to_select(
+        self,
+        select_sql: str,
+        partition: str | None,
+    ) -> str:
+        """Return ``select_sql`` with ``PARTITION`` injected after the table."""
+        if not partition:
+            return select_sql
+        select_clause, from_and_rest = self._split_select_from(select_sql)
+        table_ref, suffix = self._parse_from_rest(from_and_rest)
+        if re.search(r"\bPARTITION\b", suffix, flags=re.IGNORECASE):
+            return select_sql
+        from_source = self._append_partition(table_ref, partition)
+        return f"{select_clause} FROM {from_source} {suffix}".strip()
+
+    def _build_pull_select(
+        self,
+        select_sql: str,
+        src_config: dict[str, Any],
+        partition: str | None,
+    ) -> str:
+        """Build inner SELECT using ``remote()`` as the data source."""
+        select_clause, from_and_rest = self._split_select_from(select_sql)
+        table_ref, suffix = self._parse_from_rest(from_and_rest)
+        table_name = self._extract_table_name(table_ref)
+        host_port = f"{src_config['host']}:{src_config['port']}"
+        database = str(src_config["database"])
+        user = self._escape_ch_string(str(src_config["user"]))
+        password = self._escape_ch_string(str(src_config["password"]))
+        remote_from = (
+            f"remote('{host_port}', '{database}', '{table_name}', "
+            f"'{user}', '{password}')"
+        )
+        remote_from = self._append_partition(remote_from, partition)
+        return f"{select_clause} FROM {remote_from} {suffix}".strip()
+
+    @staticmethod
+    def _client_connection_config(client: Any) -> dict[str, Any]:
+        """Extract connection fields from a ``clickhouse_connect`` client."""
+        return {
+            "host": getattr(client, "host", "localhost"),
+            "port": getattr(client, "port", 8123),
+            "user": getattr(client, "username", getattr(client, "user", "default")),
+            "password": getattr(client, "password", ""),
+            "database": getattr(client, "database", "default"),
+        }
+
+    def build_remote_insert_sql(
+        self,
+        src_config: dict[str, Any],
+        dst_table: str,
+        select_sql: str,
+        schema: str = "",
+        pull: bool = True,
+        settings: dict[str, Any] | None = None,
+        dst_config: dict[str, Any] | None = None,
+        partition: str | None = None,
+    ) -> str:
+        """Build INSERT SQL for CK→CK server-side ``remote()`` transfer.
+
+        Pull mode (default): target server pulls from source via ``remote()``.
+        Push mode: source server pushes into ``remote()`` function target.
+
+        :param src_config: Source connection config (host, port, user, etc.).
+        :param dst_table: Destination table name.
+        :param select_sql: Inner SELECT without INSERT wrapper.
+        :param schema: Destination database name.
+        :param pull: When ``True`` use pull mode; otherwise push mode.
+        :param settings: Optional ClickHouse SETTINGS overrides.
+        :param dst_config: Destination config (required for push mode).
+        :param partition: Optional physical partition name.
+        :returns: Complete INSERT statement with SETTINGS clause.
+        """
+        merged_settings = {**_DEFAULT_REMOTE_SETTINGS, **(settings or {})}
+        settings_clause = self._format_settings_clause(merged_settings)
+
+        if pull:
+            dst_db = schema or str(src_config.get("database", ""))
+            qualified_dst = self._qualified_table(dst_db, dst_table)
+            inner_select = self._build_pull_select(
+                select_sql, src_config, partition,
+            )
+            return f"INSERT INTO {qualified_dst} {inner_select} {settings_clause}"
+
+        if dst_config is None:
+            raise ValueError("dst_config is required when pull=False")
+
+        dst_db = schema or str(dst_config.get("database", ""))
+        qualified_dst = f"{dst_db}.{dst_table}"
+        host_port = f"{dst_config['host']}:{dst_config['port']}"
+        user = self._escape_ch_string(str(dst_config["user"]))
+        password = self._escape_ch_string(str(dst_config["password"]))
+        remote_target = (
+            f"remote('{host_port}', '{qualified_dst}', '{user}', '{password}')"
+        )
+        inner_select = self._apply_partition_to_select(select_sql, partition)
+        return (
+            f"INSERT INTO FUNCTION {remote_target} {inner_select} {settings_clause}"
+        )
+
+    @staticmethod
+    def _extract_written_rows(result: Any) -> int | None:
+        """Try to read affected row count from a command/query result."""
+        if result is None:
+            return None
+        if isinstance(result, int):
+            return result
+        written = getattr(result, "written_rows", None)
+        if written is not None:
+            return int(written)
+        summary = getattr(result, "summary", None)
+        if summary is not None:
+            summary_written = getattr(summary, "written_rows", None)
+            if summary_written is not None:
+                return int(summary_written)
+        return None
+
+    def _count_select_rows(self, client: Any, select_sql: str) -> int:
+        """Return ``count()`` for an inner SELECT subquery."""
+        count_sql = f"SELECT count() FROM ({select_sql}) AS _cnt"
+        result = client.query(count_sql)
+        if hasattr(result, "result_rows"):
+            return int(result.result_rows[0][0])
+        if hasattr(result, "result_set"):
+            return int(result.result_set[0][0])
+        return int(str(result).strip())
+
+    def remote_transfer(
+        self,
+        dst_client: Any,
+        src_config: dict[str, Any],
+        dst_table: str,
+        select_sql: str,
+        schema: str = "",
+        pull: bool = True,
+        settings: dict[str, Any] | None = None,
+        physical_partitions: list[str] | None = None,
+    ) -> int:
+        """Transfer rows CK→CK via server-side ``remote()`` INSERT SELECT.
+
+        :param dst_client: Destination ClickHouse client (used in pull mode).
+        :param src_config: Source connection config dict.
+        :param dst_table: Destination table name.
+        :param select_sql: Inner SELECT without INSERT wrapper.
+        :param schema: Destination database name.
+        :param pull: When ``True`` target pulls from source; else source pushes.
+        :param settings: Optional ClickHouse SETTINGS overrides.
+        :param physical_partitions: When set, run one INSERT per partition.
+        :returns: Total rows transferred.
+        """
+        partitions: list[str | None] = (
+            list(physical_partitions) if physical_partitions else [None]
+        )
+        total = 0
+        dst_config = self._client_connection_config(dst_client)
+
+        if pull:
+            exec_client = dst_client
+        else:
+            exec_client = self.create_client(src_config)
+
+        try:
+            for partition in partitions:
+                sql = self.build_remote_insert_sql(
+                    src_config=src_config,
+                    dst_table=dst_table,
+                    select_sql=select_sql,
+                    schema=schema,
+                    pull=pull,
+                    settings=settings,
+                    dst_config=dst_config,
+                    partition=partition,
+                )
+                result = exec_client.command(sql)
+                written = self._extract_written_rows(result)
+                if written is not None:
+                    total += written
+                    continue
+
+                count_sql = (
+                    self._build_pull_select(select_sql, src_config, partition)
+                    if pull
+                    else self._apply_partition_to_select(select_sql, partition)
+                )
+                total += self._count_select_rows(exec_client, count_sql)
+        finally:
+            if not pull:
+                self.close_client(exec_client)
+
         return total
 
     def _backup_tables(

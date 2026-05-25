@@ -29,15 +29,15 @@ def test_pg_stream_read_yields_batches(mocker) -> None:
 
 
 def test_ch_stream_read(mocker) -> None:
+    import io
+
     from db.adapters.clickhouse_adapter import ClickHouseAdapter
 
     adapter = ClickHouseAdapter()
-    rows = [(1, "x"), (2, "y")]
+    csv_data = "id,val\n1,x\n2,y\n"
+    mock_stream = io.BytesIO(csv_data.encode("utf-8"))
     mock_client = mocker.MagicMock()
-    mock_result = mocker.MagicMock()
-    mock_result.column_names = ["id", "val"]
-    mock_result.result_rows = rows
-    mock_client.query.return_value = mock_result
+    mock_client.raw_stream.return_value = mock_stream
 
     columns, batch_iter = adapter.stream_read(
         mock_client, "SELECT * FROM t", batch_size=10000,
@@ -45,4 +45,5 @@ def test_ch_stream_read(mocker) -> None:
     assert columns == ["id", "val"]
     batches = list(batch_iter)
     assert len(batches) == 1
-    assert batches[0] == rows
+    assert batches[0] == [("1", "x"), ("2", "y")]
+    mock_client.query.assert_not_called()
