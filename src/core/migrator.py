@@ -1,9 +1,9 @@
 """
 数据迁移核心逻辑
 
-将源库中指定的多张表通过临时 CSV 中转迁移到目标库。
+将源库中指定的多张表迁移到目标库，默认流式直传（零磁盘 I/O）。
 支持 PostgreSQL / ClickHouse 同构及异构迁移。
-支持条件迁移、分块迁移、断点续传。
+支持用户指定范围分块、断点续传；CSV 模式作兜底。
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def migrate_tables(
     dst_adapter: Any | None = None,
     logger: Any | None = None,
     conditions: list[Any] | None = None,
-    transfer_mode: TransferMode = TransferMode.CSV,
+    transfer_mode: TransferMode = TransferMode.STREAM,
     stream_batch_size: int = 10000,
     limit_mb: int = 512,
 ) -> dict[str, Any]:
