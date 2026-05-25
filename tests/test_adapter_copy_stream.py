@@ -43,7 +43,7 @@ def test_copy_stream_transfer_empty(mocker):
     mock_dst_client.cursor.return_value.__enter__.return_value = mock_dst_cursor
 
     def copy_to_stdout(sql_str, buf):
-        pass  # empty result
+        buf.close_writer()
 
     mock_src_cursor.copy_expert.side_effect = copy_to_stdout
 
@@ -53,7 +53,7 @@ def test_copy_stream_transfer_empty(mocker):
         "users", ["id", "name"], "public",
     )
     assert count == 0
-    mock_dst_cursor.copy_expert.assert_not_called()
+    mock_dst_cursor.copy_expert.assert_called_once()
 
 
 def test_copy_stream_transfer_embedded_newlines(mocker):
