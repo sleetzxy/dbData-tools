@@ -141,13 +141,27 @@ class ImportCsvPage(BaseToolPage):
         )
         self.pre_sql_selector.pack(fill="x", pady=(0, 15))
 
-        # 备份选项
-        backup_checkbox_frame = self.ctk.CTkFrame(parent, fg_color="transparent")
-        backup_checkbox_frame.pack(anchor="w", pady=(0, 15))
+        # 导入选项
+        options_checkbox_frame = self.ctk.CTkFrame(parent, fg_color="transparent")
+        options_checkbox_frame.pack(anchor="w", pady=(0, 15))
+
+        self.truncate_var = tk.BooleanVar(value=True)
+        self.truncate_checkbox = self.ctk.CTkCheckBox(
+            options_checkbox_frame,
+            text="导入前清空表（TRUNCATE）",
+            variable=self.truncate_var,
+            font=("Microsoft YaHei", 10),
+            text_color=self.idea_dark_colors["text_primary"],
+            fg_color=self.idea_dark_colors["gray_button"],
+            hover_color=self.idea_dark_colors["gray_button_hover"],
+            border_color=self.idea_dark_colors["gray_button_border"],
+            checkmark_color=self.idea_dark_colors["text_primary"],
+        )
+        self.truncate_checkbox.pack(side="left", padx=(0, 20))
 
         self.backup_var = tk.BooleanVar(value=True)
         self.backup_checkbox = self.ctk.CTkCheckBox(
-            backup_checkbox_frame,
+            options_checkbox_frame,
             text="导入前备份数据",
             variable=self.backup_var,
             font=("Microsoft YaHei", 10),
@@ -234,6 +248,7 @@ class ImportCsvPage(BaseToolPage):
             "pre_sql_file": self.pre_sql_selector.get_path(),
             "data_path": self.path_selector.get_path(),
             "archive_password": self.archive_password_var.get(),
+            "truncate_before": self.truncate_var.get(),
             "need_backup": self.backup_var.get(),
         }
 
@@ -261,6 +276,7 @@ class ImportCsvPage(BaseToolPage):
 
         # 其他设置
         self.archive_password_var.set(config.get("archive_password", ""))
+        self.truncate_var.set(config.get("truncate_before", True))
         self.backup_var.set(config.get("need_backup", True))
 
     def execute_task(self):
@@ -273,6 +289,7 @@ class ImportCsvPage(BaseToolPage):
         # 获取参数
         pre_sql_file = self.pre_sql_selector.get_path()
         data_path = self.path_selector.get_path()
+        truncate_before = self.truncate_var.get()
         need_backup = self.backup_var.get()
         archive_password = self.archive_password_var.get().strip()
         source_type = self.data_source_var.get()
@@ -303,6 +320,7 @@ class ImportCsvPage(BaseToolPage):
             schema=db_config.get("schema", "public"),
             pre_sql_file=pre_sql_file if pre_sql_file else "",
             need_backup=need_backup,
+            truncate_before=truncate_before,
             archive_password=archive_password if archive_password else None,
         )
 

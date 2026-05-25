@@ -206,9 +206,13 @@ def import_csv_to_db(
     schema: str = "public",
     pre_sql_file: str = "",
     need_backup: bool = False,
+    truncate_before: bool = True,
     archive_password: str | None = None,
 ) -> dict[str, Any]:
-    """将 CSV 数据导入数据库，支持目录或 ZIP 数据源。"""
+    """将 CSV 数据导入数据库，支持目录或 ZIP 数据源。
+
+    :param truncate_before: 导入前是否清空目标表（TRUNCATE），默认清空。
+    """
     effective_schema = _normalize_schema(db_config.get("db_type"), schema)
     result = {
         "success": True,
@@ -254,6 +258,8 @@ def import_csv_to_db(
                 schema=adapter_schema,
                 pre_sql_file=pre_sql_file,
                 need_backup=need_backup,
+                truncate_before=truncate_before,
+                is_first_chunk=True,
                 logger=logger,
             )
 

@@ -619,9 +619,12 @@ def test_import_csv_sets_data_directory_and_passes_params(
             pre_sql_file,
             need_backup,
             logger,
+            **kwargs,
         ):
             called["pre_sql_file"] = pre_sql_file
             called["need_backup"] = need_backup
+            called["truncate_before"] = kwargs.get("truncate_before")
+            called["is_first_chunk"] = kwargs.get("is_first_chunk")
             return {
                 "success": True,
                 "imported_tables": table_names,
@@ -662,6 +665,7 @@ def test_import_csv_sets_data_directory_and_passes_params(
             schema="public",
             pre_sql_file="pre.sql",
             need_backup=True,
+            truncate_before=False,
         )
     finally:
         import shutil
@@ -670,6 +674,8 @@ def test_import_csv_sets_data_directory_and_passes_params(
 
     assert called["pre_sql_file"] == "pre.sql"
     assert called["need_backup"] is True
+    assert called["truncate_before"] is False
+    assert called["is_first_chunk"] is True
     assert result["success"] is True
     assert result["data_directory"] == import_dir
     assert result["schema"] == "public"
