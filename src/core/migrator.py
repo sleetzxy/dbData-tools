@@ -14,7 +14,8 @@ import shutil
 import tempfile
 from typing import Any
 
-from core.migration.models import MigrationCondition, TransferMode
+from core.migration.memory_budget import MemoryBudget
+from core.migration.models import MemoryBudgetConfig, MigrationCondition, TransferMode
 from core.migration.orchestrator import MigrationOrchestrator
 from utils.logger_factory import get_logger
 
@@ -33,6 +34,7 @@ def migrate_tables(
     conditions: list[Any] | None = None,
     transfer_mode: TransferMode = TransferMode.CSV,
     stream_batch_size: int = 10000,
+    limit_mb: int = 512,
 ) -> dict[str, Any]:
     """
     将源库中指定的多张表迁移到目标库。
@@ -89,6 +91,7 @@ def migrate_tables(
             for name in table_names
         ]
 
+    memory_budget = MemoryBudget(MemoryBudgetConfig(limit_mb=limit_mb))
     orchestrator = MigrationOrchestrator(
         src_config=src_config,
         dst_config=dst_config,
@@ -97,6 +100,7 @@ def migrate_tables(
         logger=_log,
         transfer_mode=transfer_mode,
         stream_batch_size=stream_batch_size,
+        memory_budget=memory_budget,
     )
 
     try:
