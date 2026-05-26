@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
 from datetime import datetime
 from typing import Any
 
@@ -45,124 +44,6 @@ class PostgreSQLAdapter:
     def close_client(self, client: psycopg2.extensions.connection) -> None:
         """Close ``client`` if it is still open."""
         client.close()
-
-    def get_table_columns(
-        self, client: psycopg2.extensions.connection, table: str, schema: str = "public",
-    ) -> list[str]:
-        cleaned = str(table).strip()
-        if not cleaned or "\x00" in cleaned:
-            raise ValueError(f"Invalid table identifier: {table}")
-        with client.cursor() as cursor:
-            cursor.execute(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_schema = %s AND table_name = %s "
-                "ORDER BY ordinal_position",
-                (schema, cleaned),
-            )
-            return [row[0] for row in cursor]
-
-    def list_partitions(
-        self,
-        client: psycopg2.extensions.connection,
-        parent_table: str,
-        schema: str = "public",
-    ) -> list[str]:
-        """Return child table names inherited from ``parent_table``."""
-        cleaned = str(parent_table).strip()
-        if not cleaned or "\x00" in cleaned:
-            raise ValueError(f"Invalid table identifier: {parent_table}")
-        with client.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT c.relname FROM pg_inherits i
-                JOIN pg_class c ON c.oid = i.inhrelid
-                JOIN pg_class p ON p.oid = i.inhparent
-                JOIN pg_namespace n ON n.oid = p.relnamespace
-                WHERE p.relname = %s AND n.nspname = %s
-                """,
-                (cleaned, schema),
-            )
-            return [row[0] for row in cursor.fetchall()]
-
-    def stream_read(
-        self,
-        client: psycopg2.extensions.connection,
-        query: str,
-        batch_size: int = 10000,
-    ) -> tuple[list[str], Iterator[list[tuple]]]:
-        """Execute query via server-side cursor, return (columns, batch iterator).
-
-        Uses a named ``psycopg2`` server-side cursor so rows are fetched from
-        the database incrementally without loading the entire result set into
-        memory at once.
-
-        :param client: Open ``psycopg2`` connection.
-        :param query: SQL SELECT statement.
-        :param batch_size: Number of rows per batch (default 10 000).
-        :returns: ``(columns, batch_iterator)`` where each batch is a list of
-            row tuples.
-        """
-        if not hasattr(self, "_stream_counter"):
-            self._stream_counter = 0
-        self._stream_counter += 1
-        cursor = client.cursor(
-            name=f"stream_{id(self)}_{self._stream_counter}",
-        )
-        cursor.execute(query)
-        if cursor.description is None:
-            cursor.close()
-            raise ValueError(
-                "stream_read requires a query that returns rows; "
-                "cursor.description is None",
-            )
-        columns = [desc[0] for desc in cursor.description]
-
-        def _batches() -> Iterator[list[tuple]]:
-            try:
-                while True:
-                    rows = cursor.fetchmany(batch_size)
-                    if not rows:
-                        break
-                    yield rows
-            finally:
-                cursor.close()
-
-        return columns, _batches()
-
-    def stream_write(
-        self,
-        client: psycopg2.extensions.connection,
-        table: str,
-        columns: list[str],
-        rows_iter: Iterator[list[tuple]],
-        schema: str = "public",
-    ) -> int:
-        """Consume row batches and INSERT into target table via execute_values.
-
-        :param client: Open ``psycopg2`` connection.
-        :param table: Target table name.
-        :param columns: Column names to insert into.
-        :param rows_iter: Iterator yielding batches of row tuples.
-        :param schema: Schema name (default ``"public"``).
-        :returns: Total number of rows inserted.
-        """
-        from psycopg2.extras import execute_values
-
-        total = 0
-        cols_sql = sql.SQL(", ").join(
-            sql.Identifier(c) for c in columns
-        )
-        insert_sql = sql.SQL("INSERT INTO {}.{} ({}) VALUES %s").format(
-            sql.Identifier(schema), sql.Identifier(table), cols_sql,
-        )
-        with client.cursor() as cursor:
-            for batch in rows_iter:
-                if not batch:
-                    continue
-                execute_values(cursor, insert_sql, batch)
-                total += len(batch)
-        client.commit()
-        return total
 
     @staticmethod
     def _get_table_counts(
@@ -406,132 +287,17 @@ class PostgreSQLAdapter:
                         continue
                     raise
 
-    @staticmethod
-    def _build_chunked_query(
-        table: str,
-        schema: str,
-        where_clause: str = "",
-        custom_sql: str = "",
-        chunk_key: str = "",
-        chunk_start: Any = None,
-        chunk_end: Any = None,
-    ) -> sql.Composed:
-        """Build a ``psycopg2.sql.Composed`` SELECT query for chunked/conditional
-        export.
-
-        SQL construction priority:
-
-        1. ``custom_sql`` + chunk: wrap custom SQL as subquery, add chunk range
-        2. ``where_clause`` + chunk:
-           ``SELECT * FROM t WHERE key>=start AND key<end AND cond``
-        3. chunk only: ``SELECT * FROM t WHERE key>=start AND key<end``
-        4. neither: full table export ``SELECT * FROM t``
-
-        :param table: Table name (trusted identifier).
-        :param schema: Schema name (trusted identifier).
-        :param where_clause: WHERE fragment without the ``WHERE`` keyword.
-        :param custom_sql: Full custom SELECT query.
-        :param chunk_key: Column name for chunking.
-        :param chunk_start: Chunk lower bound (inclusive).
-        :param chunk_end: Chunk upper bound (exclusive).
-        :returns: A safe ``Composed`` query object.
-        """
-        has_chunk = bool(chunk_key) and (
-            chunk_start is not None or chunk_end is not None
-        )
-
-        # Priority 1: custom_sql
-        if custom_sql:
-            query = sql.SQL("SELECT * FROM ({}) AS _sub").format(
-                sql.SQL(custom_sql),
-            )
-            if has_chunk:
-                conditions = []
-                if chunk_start is not None:
-                    conditions.append(
-                        sql.SQL("{} >= {}").format(
-                            sql.Identifier(chunk_key),
-                            sql.Literal(chunk_start),
-                        )
-                    )
-                if chunk_end is not None:
-                    conditions.append(
-                        sql.SQL("{} < {}").format(
-                            sql.Identifier(chunk_key),
-                            sql.Literal(chunk_end),
-                        )
-                    )
-                query = sql.SQL("{} WHERE {}").format(
-                    query,
-                    sql.SQL(" AND ").join(conditions),
-                )
-                query = sql.SQL("{} ORDER BY {}").format(
-                    query,
-                    sql.Identifier(chunk_key),
-                )
-            return query
-
-        # Base: SELECT * FROM schema.table
-        query = sql.SQL("SELECT * FROM {}.{}").format(
-            sql.Identifier(schema),
-            sql.Identifier(table),
-        )
-
-        conditions: list[sql.Composable] = []
-
-        # Chunk conditions (Priorities 2 & 3)
-        if has_chunk:
-            if chunk_start is not None:
-                conditions.append(
-                    sql.SQL("{} >= {}").format(
-                        sql.Identifier(chunk_key),
-                        sql.Literal(chunk_start),
-                    )
-                )
-            if chunk_end is not None:
-                conditions.append(
-                    sql.SQL("{} < {}").format(
-                        sql.Identifier(chunk_key),
-                        sql.Literal(chunk_end),
-                    )
-                )
-
-        # WHERE clause (Priority 2)
-        if where_clause:
-            conditions.append(
-                sql.SQL("({})").format(sql.SQL(where_clause)),
-            )
-
-        if conditions:
-            query = sql.SQL("{} WHERE {}").format(
-                query,
-                sql.SQL(" AND ").join(conditions),
-            )
-
-        if has_chunk:
-            query = sql.SQL("{} ORDER BY {}").format(
-                query,
-                sql.Identifier(chunk_key),
-            )
-
-        return query
-
     def export_csv(
         self,
         client: psycopg2.extensions.connection,
         db_config: dict[str, Any],
-        table: str,
+        tables: list[str],
         export_dir: str,
         schema: str = "public",
         include_header: bool = True,
-        where_clause: str = "",
-        custom_sql: str = "",
-        chunk_key: str = "",
-        chunk_start: Any = None,
-        chunk_end: Any = None,
         logger: Any | None = None,
     ) -> dict[str, Any]:
-        """Export a single ``table`` from ``schema`` into CSV under ``export_dir``."""
+        """Export ``tables`` from ``schema`` into CSV files under ``export_dir``."""
         result = {
             "success": True,
             "exported_tables": [],
@@ -556,73 +322,66 @@ class PostgreSQLAdapter:
                 result["error"] = f"Schema '{schema}' does not exist"
                 return result
 
-            try:
-                table_str = str(table).strip()
-                output_file = os.path.join(export_dir, f"{table_str}.csv")
-                if logger:
-                    logger.info(
-                        f"Exporting table {schema}.{table_str} -> {output_file}"
+            for table in tables:
+                try:
+                    output_file = os.path.join(export_dir, f"{table}.csv")
+                    if logger:
+                        logger.info(
+                            f"Exporting table {schema}.{table} -> {output_file}"
+                        )
+
+                    header_sql = sql.SQL(", HEADER") if include_header else sql.SQL("")
+                    copy_command = sql.SQL(
+                        "COPY {}.{} TO STDOUT WITH (FORMAT csv, DELIMITER ','{header})"
+                    ).format(
+                        sql.Identifier(schema),
+                        sql.Identifier(table),
+                        header=header_sql,
                     )
 
-                select_query = self._build_chunked_query(
-                    table=table_str,
-                    schema=schema,
-                    where_clause=where_clause,
-                    custom_sql=custom_sql,
-                    chunk_key=chunk_key,
-                    chunk_start=chunk_start,
-                    chunk_end=chunk_end,
-                )
+                    with open(output_file, "w", encoding="utf-8") as f:
+                        cursor.copy_expert(copy_command.as_string(client), f)
 
-                header_sql = sql.SQL(", HEADER") if include_header else sql.SQL("")
-                copy_command = sql.SQL(
-                    "COPY ({}) TO STDOUT WITH (FORMAT csv, DELIMITER ','{header})",
-                ).format(select_query, header=header_sql)
-
-                with open(output_file, "w", encoding="utf-8") as f:
-                    cursor.copy_expert(copy_command.as_string(client), f)
-
-                count_query = sql.SQL("SELECT COUNT(*) FROM ({}) AS _cnt").format(
-                    select_query,
-                )
-                cursor.execute(count_query)
-                count_row = cursor.fetchone()
-                row_count = (
-                    int(count_row[0])
-                    if count_row and count_row[0] is not None
-                    else 0
-                )
-                result["total_rows"] += row_count
-                result["exported_tables"].append(
-                    {
-                        "schema": schema,
-                        "name": table_str,
-                        "rows": row_count,
-                        "file": output_file,
-                    }
-                )
-
-                if logger:
-                    logger.info(
-                        "Table %s.%s exported successfully, rows: %s",
-                        schema,
-                        table_str,
-                        row_count,
+                    count_query = sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
+                        sql.Identifier(schema),
+                        sql.Identifier(table),
                     )
-            except (OSError, psycopg2.Error) as exc:
-                error_msg = (
-                    f"Export failed for table {schema}.{table_str}: {str(exc)}"
-                )
-                if logger:
-                    logger.error(error_msg)
-                result["error_tables"].append(
-                    {
-                        "schema": schema,
-                        "name": table_str,
-                        "error": str(exc),
-                    }
-                )
-                result["success"] = False
+                    cursor.execute(count_query)
+                    count_row = cursor.fetchone()
+                    row_count = (
+                        int(count_row[0])
+                        if count_row and count_row[0] is not None
+                        else 0
+                    )
+                    result["total_rows"] += row_count
+                    result["exported_tables"].append(
+                        {
+                            "schema": schema,
+                            "name": table,
+                            "rows": row_count,
+                            "file": output_file,
+                        }
+                    )
+
+                    if logger:
+                        logger.info(
+                            "Table %s.%s exported successfully, rows: %s",
+                            schema,
+                            table,
+                            row_count,
+                        )
+                except (OSError, psycopg2.Error) as exc:
+                    error_msg = f"Export failed for table {schema}.{table}: {str(exc)}"
+                    if logger:
+                        logger.error(error_msg)
+                    result["error_tables"].append(
+                        {
+                            "schema": schema,
+                            "name": table,
+                            "error": str(exc),
+                        }
+                    )
+                    result["success"] = False
         except (OSError, psycopg2.Error) as exc:
             error_msg = f"Export process failed: {str(exc)}"
             if logger:
@@ -645,16 +404,10 @@ class PostgreSQLAdapter:
         pre_sql_file: str = "",
         need_backup: bool = False,
         truncate_before: bool = True,
-        is_first_chunk: bool = False,
+        is_first_chunk: bool = True,
         logger: Any | None = None,
     ) -> dict[str, Any]:
-        """Bulk-load CSVs for ``table_names`` with optional backup and pre-SQL.
-
-        :param is_first_chunk: When ``True`` and ``truncate_before`` is also
-            ``True``, truncate the target table before importing (first chunk
-            of a migration). When ``False`` (default), skip truncation even if
-            ``truncate_before`` is set, so subsequent chunks can append data.
-        """
+        """Bulk-load CSVs for ``table_names`` with optional backup and pre-SQL."""
         schema = schema.strip() if isinstance(schema, str) else schema
         if not schema:
             schema = "public"
@@ -714,7 +467,7 @@ class PostgreSQLAdapter:
                     if logger:
                         logger.info(f"Importing {schema}.{table} <- {csv_file}")
                     with client.cursor() as cursor:
-                        if truncate_before and is_first_chunk:
+                        if truncate_before:
                             truncate_sql = sql.SQL("TRUNCATE TABLE {}.{}").format(
                                 sql.Identifier(schema),
                                 sql.Identifier(table),
@@ -811,83 +564,6 @@ class PostgreSQLAdapter:
                 pass
 
         return result
-
-    def copy_stream_transfer(
-        self,
-        src_client: psycopg2.extensions.connection,
-        dst_client: psycopg2.extensions.connection,
-        src_query: str,
-        dst_table: str,
-        columns: list[str],
-        schema: str = "public",
-        max_buffer_bytes: int | None = None,
-    ) -> int:
-        """PG to PG high-speed transfer via bounded COPY bridge (no disk I/O).
-
-        Streams data from ``src_query`` on the source connection into the target
-        table using concurrent ``COPY ... TO STDOUT`` and ``COPY ... FROM STDIN``
-        through a :class:`~core.migration.copy_bridge.CopyBridge` pipe.
-
-        :param src_client: Source PG connection.
-        :param dst_client: Target PG connection.
-        :param src_query: SELECT query to read data from the source.
-        :param dst_table: Target table name.
-        :param columns: Column names to insert into.
-        :param schema: Target schema name (default ``"public"``).
-        :param max_buffer_bytes: In-flight COPY buffer cap; defaults to
-            :attr:`~core.migration.memory_budget.MemoryBudget.buffer_bytes`
-            for a 512 MB budget (134 217 728 bytes).
-        :returns: Number of rows transferred.
-        """
-        from core.migration.copy_bridge import copy_via_bridge
-        from core.migration.memory_budget import MemoryBudget
-        from core.migration.models import MemoryBudgetConfig
-
-        buffer_bytes = (
-            max_buffer_bytes
-            if max_buffer_bytes is not None
-            else MemoryBudget(MemoryBudgetConfig()).buffer_bytes
-        )
-
-        copy_out = sql.SQL(
-            "COPY ({}) TO STDOUT WITH (FORMAT CSV, HEADER false)",
-        ).format(sql.SQL(src_query))
-        if isinstance(src_client, psycopg2.extensions.connection):
-            copy_out_str = copy_out.as_string(src_client)
-        else:
-            copy_out_str = (
-                f"COPY ({src_query}) TO STDOUT WITH (FORMAT CSV, HEADER false)"
-            )
-
-        cols_sql = sql.SQL(", ").join(sql.Identifier(c) for c in columns)
-        copy_in = sql.SQL("COPY {}.{} ({}) FROM STDIN WITH (FORMAT CSV)").format(
-            sql.Identifier(schema),
-            sql.Identifier(dst_table),
-            cols_sql,
-        )
-        if isinstance(dst_client, psycopg2.extensions.connection):
-            copy_in_str = copy_in.as_string(dst_client)
-        else:
-            cols_join = ", ".join(_quote_pg_ident_segment(c) for c in columns)
-            schema_tbl = (
-                f"{_quote_pg_ident_segment(schema)}."
-                f"{_quote_pg_ident_segment(dst_table)}"
-            )
-            copy_in_str = (
-                f"COPY {schema_tbl} ({cols_join}) FROM STDIN WITH (FORMAT CSV)"
-            )
-
-        with src_client.cursor() as src_cur, dst_client.cursor() as dst_cur:
-            row_count = copy_via_bridge(
-                src_cur,
-                dst_cur,
-                copy_out_str,
-                copy_in_str,
-                buffer_bytes,
-            )
-
-        dst_client.commit()
-        return row_count
 
     def export_sql(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Write schema data and DDL for ``schema`` into a single ``.sql`` file.

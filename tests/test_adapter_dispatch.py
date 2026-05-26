@@ -78,7 +78,7 @@ def test_export_tables_to_csv_dispatches_postgresql_adapter(
         self,
         client,
         db_config,
-        table,
+        tables,
         export_dir,
         schema="public",
         include_header=True,
@@ -88,7 +88,8 @@ def test_export_tables_to_csv_dispatches_postgresql_adapter(
         return {
             "success": True,
             "exported_tables": [
-                {"schema": schema, "name": table, "rows": 0, "file": ""},
+                {"schema": schema, "name": t, "rows": 0, "file": ""}
+                for t in tables
             ],
             "error_tables": [],
             "total_rows": 0,
@@ -142,7 +143,7 @@ def test_export_tables_to_csv_dispatches_clickhouse_adapter(
         self,
         client,
         db_config,
-        table,
+        tables,
         export_dir,
         schema="",
         include_header=True,
@@ -152,7 +153,8 @@ def test_export_tables_to_csv_dispatches_clickhouse_adapter(
         return {
             "success": True,
             "exported_tables": [
-                {"schema": schema, "name": table, "rows": 0, "file": ""},
+                {"schema": schema, "name": t, "rows": 0, "file": ""}
+                for t in tables
             ],
             "error_tables": [],
             "total_rows": 0,
@@ -409,7 +411,9 @@ def test_import_csv_dispatches_postgresql_adapter(monkeypatch: MonkeyPatch) -> N
             schema,
             pre_sql_file,
             need_backup,
-            logger,
+            truncate_before=True,
+            is_first_chunk=True,
+            logger=None,
         ):
             called["adapter"] = "postgresql"
             called["schema"] = schema
@@ -481,7 +485,9 @@ def test_import_csv_dispatches_clickhouse_adapter_schema_empty(
             schema,
             pre_sql_file,
             need_backup,
-            logger,
+            truncate_before=True,
+            is_first_chunk=True,
+            logger=None,
         ):
             called["schema"] = schema
             return {
@@ -549,7 +555,9 @@ def test_import_csv_result_passes_through_adapter(monkeypatch: MonkeyPatch) -> N
             schema,
             pre_sql_file,
             need_backup,
-            logger,
+            truncate_before=True,
+            is_first_chunk=True,
+            logger=None,
         ):
             return {
                 "success": False,
@@ -758,7 +766,9 @@ def test_import_csv_postgresql_blank_schema_defaults_public(
             schema,
             pre_sql_file,
             need_backup,
-            logger,
+            truncate_before=True,
+            is_first_chunk=True,
+            logger=None,
         ):
             called["schema"] = schema
             return {

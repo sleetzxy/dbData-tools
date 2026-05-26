@@ -18,15 +18,10 @@ def _make_mock_adapter(
             self,
             client: object,
             db_config: dict[str, Any],
-            table: str,
+            tables: list[str],
             export_dir: str,
             schema: str = "",
             include_header: bool = True,
-            where_clause: str = "",
-            custom_sql: str = "",
-            chunk_key: str = "",
-            chunk_start: Any = None,
-            chunk_end: Any = None,
             logger: Any = None,
         ) -> dict[str, Any]:
             result: dict[str, Any] = {
@@ -35,22 +30,23 @@ def _make_mock_adapter(
                 "error_tables": [],
                 "total_rows": 0,
             }
-            if table in fail_tables_final:
-                result["error_tables"].append(
-                    {"name": table, "error": "mock export error"}
+            for table in tables:
+                if table in fail_tables_final:
+                    result["error_tables"].append(
+                        {"name": table, "error": "mock export error"}
+                    )
+                    result["success"] = False
+                    continue
+                filepath = os.path.join(export_dir, f"{table}.csv")
+                with open(filepath, "w", newline="", encoding="utf-8") as f:
+                    writer = csv_mod.writer(f)
+                    writer.writerow(["id", "val"])
+                    for i in range(rows_per_table):
+                        writer.writerow([i, f"v{i}"])
+                result["exported_tables"].append(
+                    {"name": table, "rows": rows_per_table}
                 )
-                result["success"] = False
-                return result
-            filepath = os.path.join(export_dir, f"{table}.csv")
-            with open(filepath, "w", newline="", encoding="utf-8") as f:
-                writer = csv_mod.writer(f)
-                writer.writerow(["id", "val"])
-                for i in range(rows_per_table):
-                    writer.writerow([i, f"v{i}"])
-            result["exported_tables"].append(
-                {"name": table, "rows": rows_per_table}
-            )
-            result["total_rows"] += rows_per_table
+                result["total_rows"] += rows_per_table
             return result
 
         def import_csv(
@@ -63,7 +59,6 @@ def _make_mock_adapter(
             pre_sql_file: str = "",
             need_backup: bool = False,
             truncate_before: bool = True,
-            is_first_chunk: bool = False,
             logger: Any = None,
         ) -> dict[str, Any]:
             result: dict[str, Any] = {
@@ -157,26 +152,22 @@ def test_migrate_tables_truncate_before_false_passes_param() -> None:
             self,
             client: object,
             db_config: dict[str, Any],
-            table: str,
+            tables: list[str],
             export_dir: str,
             schema: str = "",
             include_header: bool = True,
-            where_clause: str = "",
-            custom_sql: str = "",
-            chunk_key: str = "",
-            chunk_start: Any = None,
-            chunk_end: Any = None,
             logger: Any = None,
         ) -> dict[str, Any]:
-            with open(
-                os.path.join(export_dir, f"{table}.csv"), "w", encoding="utf-8"
-            ) as f:
-                f.write("id\n1\n")
+            for table in tables:
+                with open(
+                    os.path.join(export_dir, f"{table}.csv"), "w", encoding="utf-8"
+                ) as f:
+                    f.write("id\n1\n")
             return {
                 "success": True,
-                "exported_tables": [{"name": table, "rows": 1}],
+                "exported_tables": [{"name": t, "rows": 1} for t in tables],
                 "error_tables": [],
-                "total_rows": 1,
+                "total_rows": len(tables),
             }
 
         def import_csv(
@@ -189,7 +180,6 @@ def test_migrate_tables_truncate_before_false_passes_param() -> None:
             pre_sql_file: str = "",
             need_backup: bool = False,
             truncate_before: bool = True,
-            is_first_chunk: bool = False,
             logger: Any = None,
         ) -> dict[str, Any]:
             truncate_calls.append(truncate_before)
