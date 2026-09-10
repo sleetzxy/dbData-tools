@@ -15,9 +15,13 @@ from core.email_monitor.filters import (
     normalize_extensions,
     sender_matches,
 )
+from core.email_monitor.large_attachment import iter_large_attachments_from_message
 from core.email_monitor.models import MonitorConfig
 
 logger = logging.getLogger(__name__)
+
+# 大邮件 / 慢网络：IMAP 读写超时（秒）
+_IMAP_SOCKET_TIMEOUT = 300
 
 # IMAP SINCE 要求英文月份缩写，避免依赖系统 locale
 _IMAP_MONTHS = (
@@ -219,9 +223,26 @@ def iter_matching_attachments(
                 yielded_for_mail = True
                 yield uid, filename, payload
 
+            # 腾讯「超大附件」不在 MIME 中，需解析正文中转站链接并 HTTP 下载
+            for filename, payload in iter_large_attachments_from_message(
+                msg, log=log
+            ):
+                if not extension_allowed(filename, allowed_exts):
+                    skipped_ext += 1
+                    log.info(
+                        "跳过扩展名不匹配的超大附件：uid=%s filename=%s allowed=%s",
+                        uid,
+                        filename,
+                        sorted(allowed_exts),
+                    )
+                    continue
+                matched_attach += 1
+                yielded_for_mail = True
+                yield uid, filename, payload
+
             if not yielded_for_mail:
                 log.info(
-                    "发件人已匹配但无可用附件：uid=%s From=%s",
+                    "发件人已匹配但无可用附件（含超大附件链接）：uid=%s From=%s",
                     uid,
                     msg.get("From", ""),
                 )
@@ -243,8 +264,15 @@ def iter_matching_attachments(
 def _open_client(cfg: MonitorConfig) -> imaplib.IMAP4:
     """按配置建立 SSL 或明文 IMAP 连接。"""
     if cfg.use_ssl:
-        return imaplib.IMAP4_SSL(cfg.host, cfg.port)
-    return imaplib.IMAP4(cfg.host, cfg.port)
+        client: imaplib.IMAP4 = imaplib.IMAP4_SSL(cfg.host, cfg.port)
+    else:
+        client = imaplib.IMAP4(cfg.host, cfg.port)
+    # 大邮件整封 FETCH 可能较慢
+    try:
+        client.sock.settimeout(_IMAP_SOCKET_TIMEOUT)
+    except Exception:
+        pass
+    return client
 
 
 def _extract_rfc822(msg_data: Any) -> Optional[bytes]:

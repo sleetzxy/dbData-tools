@@ -46,7 +46,11 @@ class EmailMonitorPage(BaseToolPage):
     def setup_left_panel_content(self, parent: Any) -> None:
         """构建左侧配置表单与操作按钮（不展示数据库连接页头）。"""
         title = TitleLabel(parent, text="邮件附件监控")
-        title.pack(anchor="w", pady=(0, 12))
+        title.pack(anchor="w", pady=(0, 4))
+        StyledLabel(
+            parent,
+            text="支持普通 MIME 附件与腾讯超大附件（正文中转站链接）",
+        ).pack(anchor="w", pady=(0, 12))
 
         self.host_entry = self._labeled_entry(
             parent, "IMAP 主机", _DEFAULT_HOST
