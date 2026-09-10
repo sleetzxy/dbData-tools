@@ -16,6 +16,9 @@ from core.email_monitor.saver import save_attachment_bytes
 # 连续 tick 失败达到该阈值后触发致命回调并停止
 _MAX_CONSECUTIVE_FAILURES = 5
 
+# stop() 等待后台线程退出的超时（避免长时间卡住 UI）
+_JOIN_TIMEOUT_SECONDS = 2.0
+
 # 默认去重文件路径
 _DEFAULT_DEDUP_PATH = Path.home() / ".dbdata_tools" / "email_monitor_seen.json"
 
@@ -62,15 +65,20 @@ class EmailMonitorService:
     def start(self, config_snapshot: MonitorConfig) -> None:
         """启动监控：立即执行首轮 tick，再按间隔循环。
 
-        若已在运行则忽略重复启动。
+        若已在运行（含 stop 超时仍存活的旧线程）则拒绝启动，
+        且不得清除 ``_stop_event``，以免复活旧轮询线程。
 
         :param config_snapshot: 本轮监控使用的配置快照。
+        :raises RuntimeError: 旧后台线程仍存活时拒绝启动。
         """
         with self._lock:
             if self.is_running():
-                self._logger.warning("邮件监控已在运行，忽略重复 start")
-                return
+                # 旧线程仍存活时绝不能 clear stop，否则会双线程轮询
+                msg = "邮件监控线程仍在运行，拒绝 start（请待旧线程退出后再启动）"
+                self._logger.error(msg)
+                raise RuntimeError(msg)
 
+            # 仅在确认无存活线程后才允许清除停止信号并启动新线程
             self._stop_event.clear()
             self._consecutive_failures = 0
             self._thread = threading.Thread(
@@ -82,14 +90,24 @@ class EmailMonitorService:
             self._thread.start()
 
     def stop(self) -> None:
-        """请求协作停止并等待后台线程结束。"""
+        """请求协作停止并等待后台线程结束。
+
+        若 join 超时后线程仍存活，保留 ``_thread`` 引用且保持
+        ``is_running()`` 为 True，避免后续 start 误清 stop 信号。
+        """
         self._stop_event.set()
         thread = self._thread
         if thread is not None and thread.is_alive():
-            thread.join(timeout=30.0)
+            thread.join(timeout=_JOIN_TIMEOUT_SECONDS)
         with self._lock:
-            if self._thread is thread:
-                self._thread = None
+            if self._thread is not thread:
+                return
+            if thread is not None and thread.is_alive():
+                self._logger.warning(
+                    "邮件监控线程在 stop 超时后仍存活，保留引用且不视为已停止"
+                )
+                return
+            self._thread = None
 
     def _run_loop(self, cfg: MonitorConfig) -> None:
         """后台循环：tick → 按 interval 等待，直到 stop 或致命失败。"""

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -68,9 +69,9 @@ class DedupStore:
         return set(data)
 
     def _save(self) -> None:
-        """将去重键集合写入 JSON 文件。"""
+        """将去重键集合原子写入 JSON 文件（临时文件 + os.replace）。"""
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            json.dumps(sorted(self._seen), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        payload = json.dumps(sorted(self._seen), ensure_ascii=False, indent=2)
+        tmp_path = self._path.with_name(f"{self._path.name}.tmp")
+        tmp_path.write_text(payload, encoding="utf-8")
+        os.replace(tmp_path, self._path)
