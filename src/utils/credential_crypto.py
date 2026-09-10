@@ -27,27 +27,22 @@ def _ensure_key(key_file: Path) -> bytes:
     """读取或首次生成 32 字节密钥并写入磁盘。"""
     if key_file.exists():
         key = key_file.read_bytes()
-        if len(key) != _KEY_SIZE:
-            raise ValueError(f"密钥文件长度无效: {key_file}")
-        return key
+        if len(key) == _KEY_SIZE:
+            return key
+        # 损坏密钥无法恢复，删除后重建（避免半写入文件导致后续失败）
+        key_file.unlink(missing_ok=True)
 
     key_file.parent.mkdir(parents=True, exist_ok=True)
     key = secrets.token_bytes(_KEY_SIZE)
-    # 先独占创建再写满字节，避免 Windows 上部分写入导致密钥长度无效
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    fd = os.open(key_file, flags, 0o600)
+    # 原子写入：先写临时文件再替换，避免半写入密钥
+    tmp_file = key_file.with_name(f"{key_file.name}.tmp")
+    tmp_file.write_bytes(key)
+    os.replace(tmp_file, key_file)
     try:
-        view = memoryview(key)
-        written = 0
-        while written < _KEY_SIZE:
-            written += os.write(fd, view[written:])
-        try:
-            os.fsync(fd)
-        except OSError:
-            # 部分环境不支持 fsync，忽略即可
-            pass
-    finally:
-        os.close(fd)
+        os.chmod(key_file, 0o600)
+    except OSError:
+        # Windows 上 chmod 可能无效，忽略
+        pass
     return key
 
 

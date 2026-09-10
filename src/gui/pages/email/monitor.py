@@ -17,7 +17,6 @@ from gui.widgets.buttons import PrimaryButton, StyledButton
 from gui.widgets.entries import StyledEntry
 from gui.widgets.labels import StyledLabel, TitleLabel
 from utils.credential_crypto import decrypt_secret, encrypt_secret
-from utils.task_history import update_task
 
 # 腾讯企业邮默认 IMAP
 _DEFAULT_HOST = "imap.exmail.qq.com"
@@ -34,8 +33,6 @@ class EmailMonitorPage(BaseToolPage):
     """
 
     CONFIG_FILE = "~/.dbdata_tools/email_monitor.json"
-    TASK_TYPE = "email_monitor"
-    REQUIRES_ACTIVE_CONNECTION = False
 
     def __init__(self, root: Any) -> None:
         self._monitor_service: Optional[EmailMonitorService] = None
@@ -323,7 +320,7 @@ class EmailMonitorPage(BaseToolPage):
         threading.Thread(target=worker, daemon=True, name="EmailMonitorTest").start()
 
     def _on_start_monitor(self) -> None:
-        """校验配置后启动后台监控，并写入任务历史。"""
+        """校验配置后启动后台监控。"""
         if self._is_monitoring:
             return
 
@@ -336,18 +333,12 @@ class EmailMonitorPage(BaseToolPage):
             return
 
         self.save_current_config()
-        self._begin_task_history()
         service = self._ensure_service()
         try:
             service.start(cfg)
         except Exception as exc:
             if self.logger:
                 self.logger.exception("启动监控失败")
-            self._finish_task_history(
-                self._current_task_id,
-                success=False,
-                error_message=str(exc),
-            )
             messagebox.showerror("开始监控", f"启动失败：{exc}")
             return
 
@@ -361,7 +352,7 @@ class EmailMonitorPage(BaseToolPage):
             )
 
     def _on_stop_monitor(self) -> None:
-        """停止监控并用自定义摘要更新任务历史。"""
+        """停止监控。"""
         if not self._is_monitoring and (
             self._monitor_service is None or not self._monitor_service.is_running()
         ):
@@ -377,12 +368,6 @@ class EmailMonitorPage(BaseToolPage):
         def update_ui() -> None:
             if self.logger:
                 self.logger.error(message)
-            task_id = self._current_task_id
-            self._finish_task_history(
-                task_id,
-                success=False,
-                error_message=message,
-            )
             self._set_monitoring_ui(False)
             messagebox.showerror("监控已停止", message)
 
@@ -395,7 +380,7 @@ class EmailMonitorPage(BaseToolPage):
     def stop_monitor_if_running(self, *, user_initiated: bool = False) -> None:
         """若监控仍在运行则停止；供停止按钮与主壳关闭调用。
 
-        :param user_initiated: True 时写入「用户停止监控」任务摘要。
+        :param user_initiated: True 表示用户主动点停止（仅影响日志文案）。
         """
         service = self._monitor_service
         was_running = self._is_monitoring or (
@@ -408,38 +393,8 @@ class EmailMonitorPage(BaseToolPage):
                 if self.logger:
                     self.logger.exception("停止邮件监控时出错")
 
-        task_id = self._current_task_id
-        if was_running and task_id and user_initiated:
-            try:
-                update_task(
-                    task_id,
-                    status="success",
-                    summary="用户停止监控",
-                    log_excerpt=self._log_excerpt(),
-                )
-                self._notify_chrome_refresh()
-            except Exception as exc:
-                if self.logger:
-                    self.logger.warning(f"更新任务历史失败: {exc}")
-            finally:
-                if self._current_task_id == task_id:
-                    self._current_task_id = None
-        elif was_running and task_id and not user_initiated:
-            # 关应用：尽量收尾为成功停止，避免留下 running 残留
-            try:
-                update_task(
-                    task_id,
-                    status="success",
-                    summary="应用关闭，监控已停止",
-                    log_excerpt=self._log_excerpt(),
-                )
-                self._notify_chrome_refresh()
-            except Exception:
-                pass
-            finally:
-                if self._current_task_id == task_id:
-                    self._current_task_id = None
-
         self._set_monitoring_ui(False)
         if was_running and self.logger and user_initiated:
             self.logger.info("邮件监控已停止")
+        elif was_running and self.logger and not user_initiated:
+            self.logger.info("应用关闭，邮件监控已停止")

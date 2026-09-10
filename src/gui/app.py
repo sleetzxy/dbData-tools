@@ -14,6 +14,7 @@ from gui.pages.csv.importer_type import ImportCsvTypeApp
 from gui.pages.csv.updater import UpdateCsvApp
 from gui.pages.database.exporter import ExportDbApp
 from gui.pages.database.migrator import MigratorPage
+from gui.pages.email import EmailMonitorPage
 from gui.pages.management.connection import ConnectionManager
 from gui.styling.themes import get_idea_dark_colors, init_theme
 from gui.widgets.tooltip import ToolTipManager
@@ -113,6 +114,9 @@ class MainApplication:
 
     def _on_closing(self):
         """窗口关闭时的清理"""
+        page = self.pages.get("email_monitor") if hasattr(self, "pages") else None
+        if page is not None and hasattr(page, "stop_monitor_if_running"):
+            page.stop_monitor_if_running()
         self.tooltip_manager.cleanup()
         self.root.quit()
 
@@ -142,6 +146,7 @@ class MainApplication:
             ("📦", "数据库导出", self.load_db_exporter),
             ("🔀", "数据迁移", self.load_migrator),
             ("🔄", "CSV加解密", self.load_updater),
+            ("📧", "邮件附件监控", self.load_email_monitor),
         ]
 
         # 创建工具按钮
@@ -545,6 +550,16 @@ class MainApplication:
         if btn:
             btn.configure(fg_color=self.idea_dark_colors["button_hover"])
         self._show_page("migrator", builder=lambda parent: MigratorPage(parent))
+
+    def load_email_monitor(self):
+        """加载邮件附件监控工具（持久化页面切换）"""
+        self._reset_menu_buttons()
+        btn = self.command_to_button.get("load_email_monitor")
+        if btn:
+            btn.configure(fg_color=self.idea_dark_colors["button_hover"])
+        self._show_page(
+            "email_monitor", builder=lambda parent: EmailMonitorPage(parent)
+        )
 
     def clear_content(self):
         """清空内容区域（不销毁，仅隐藏以避免Tk命令失效）"""
