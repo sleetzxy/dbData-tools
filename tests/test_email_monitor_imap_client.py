@@ -150,6 +150,44 @@ def test_iter_attachments_includes_filename_without_disposition() -> None:
     assert "report.xlsx" in names
 
 
+def test_iter_attachments_chinese_zip_filename() -> None:
+    """中文 zip 附件名应可提取且扩展名为 .zip。"""
+    msg = MIMEMultipart()
+    msg["From"] = "Xie <xiehaiying@pcitech.com>"
+    filename = "长春交通大脑20260910版本csv.zip"
+    zip_part = MIMEApplication(b"PK\x03\x04demo", Name=filename)
+    zip_part.add_header("Content-Disposition", "attachment", filename=filename)
+    msg.attach(zip_part)
+
+    attachments = list(iter_attachments_from_message(msg))
+    assert len(attachments) == 1
+    assert attachments[0][0].endswith(".zip")
+    from core.email_monitor.filters import extension_allowed
+
+    assert extension_allowed(attachments[0][0], {".zip"})
+
+
+def test_iter_matching_attachments_matches_reply_to(tmp_path: Any) -> None:
+    """From 非白名单但 Reply-To 命中时仍应下载。"""
+    msg = MIMEMultipart()
+    msg["From"] = "relay@system.local"
+    msg["Reply-To"] = "xiehaiying@pcitech.com"
+    zip_part = MIMEApplication(b"PKDATA", Name="a.zip")
+    zip_part.add_header("Content-Disposition", "attachment", filename="a.zip")
+    msg.attach(zip_part)
+    rfc822 = msg.as_bytes()
+
+    fake = _FakeImap(rfc822)
+    cfg = _valid_config(
+        tmp_path,
+        senders=["xiehaiying@pcitech.com"],
+        extensions=[".zip"],
+    )
+    results = list(iter_matching_attachments(cfg, imap=fake))
+    assert len(results) == 1
+    assert results[0][1] == "a.zip"
+
+
 class _FakeImap:
     """可注入的假 IMAP，断言必须走 UID 命令。"""
 

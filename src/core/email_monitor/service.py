@@ -50,7 +50,13 @@ class EmailMonitorService:
         )
         self._on_fatal = on_fatal
         self._logger = logger or logging.getLogger(__name__)
-        self._fetch = fetch_attachments or iter_matching_attachments
+        if fetch_attachments is not None:
+            self._fetch = fetch_attachments
+        else:
+            # 把服务日志传入 IMAP 扫描，便于 GUI 右侧看到诊断信息
+            self._fetch = lambda cfg: iter_matching_attachments(
+                cfg, log=self._logger
+            )
 
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
