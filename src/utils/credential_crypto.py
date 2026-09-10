@@ -33,10 +33,19 @@ def _ensure_key(key_file: Path) -> bytes:
 
     key_file.parent.mkdir(parents=True, exist_ok=True)
     key = secrets.token_bytes(_KEY_SIZE)
+    # 先独占创建再写满字节，避免 Windows 上部分写入导致密钥长度无效
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     fd = os.open(key_file, flags, 0o600)
     try:
-        os.write(fd, key)
+        view = memoryview(key)
+        written = 0
+        while written < _KEY_SIZE:
+            written += os.write(fd, view[written:])
+        try:
+            os.fsync(fd)
+        except OSError:
+            # 部分环境不支持 fsync，忽略即可
+            pass
     finally:
         os.close(fd)
     return key
