@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Callable
 from email.header import decode_header, make_header
 from email.message import Message
 from html import unescape
@@ -55,6 +56,127 @@ _DEFAULT_UA = (
 )
 
 _FTN_META_HOST = "https://wx.mail.qq.com/ftn/download"
+
+# 分块下载与进度（避免整包 read；文字进度降为 debug，UI 走 on_progress）
+_DOWNLOAD_CHUNK_SIZE = 256 * 1024
+_PROGRESS_RATIO_STEP = 0.1
+_PROGRESS_BYTES_STEP = 8 * 1024 * 1024
+
+# (filename, downloaded_bytes, total_bytes|None, finished)
+DownloadProgressFn = Callable[[str, int, Optional[int], bool], None]
+
+
+def format_byte_size(num_bytes: int) -> str:
+    """将字节数格式化为可读大小。"""
+    size = float(max(0, num_bytes))
+    units = ("B", "KB", "MB", "GB")
+    for index, unit in enumerate(units):
+        is_last = index == len(units) - 1
+        if size < 1024.0 or is_last:
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return "0 B"
+
+
+def read_response_bytes(
+    response: object,
+    *,
+    label: str,
+    total_size: Optional[int] = None,
+    log: Optional[logging.Logger] = None,
+    chunk_size: int = _DOWNLOAD_CHUNK_SIZE,
+    on_progress: Optional[DownloadProgressFn] = None,
+) -> bytes:
+    """分块读取 HTTP 响应，并通过回调/日志报告进度。
+
+    :param response: 支持 ``read(size)`` 的响应对象。
+    :param label: 进度中的文件名标签。
+    :param total_size: 可选总字节数；也可从响应 ``Content-Length`` 推断。
+    :param log: 日志器；为 ``None`` 时使用模块默认 logger。
+    :param chunk_size: 单次读取块大小。
+    :param on_progress: 可选进度回调 ``(name, downloaded, total, finished)``。
+    :return: 完整响应字节。
+    """
+    log = log or logger
+    headers = getattr(response, "headers", None)
+    if total_size is None and headers is not None:
+        raw_len = headers.get("Content-Length")
+        if raw_len:
+            try:
+                parsed = int(raw_len)
+                if parsed > 0:
+                    total_size = parsed
+            except (TypeError, ValueError):
+                pass
+
+    def _emit(downloaded: int, finished: bool) -> None:
+        if on_progress is not None:
+            on_progress(label, downloaded, total_size, finished)
+        if finished:
+            if total_size and total_size > 0:
+                log.debug(
+                    "下载进度：%s %s / %s（100%%）",
+                    label,
+                    format_byte_size(downloaded),
+                    format_byte_size(total_size),
+                )
+            else:
+                log.debug(
+                    "下载进度：%s 已接收 %s（完成）",
+                    label,
+                    format_byte_size(downloaded),
+                )
+
+    if total_size and total_size > 0:
+        log.debug(
+            "开始下载：%s（%s）",
+            label,
+            format_byte_size(total_size),
+        )
+    else:
+        log.debug("开始下载：%s", label)
+
+    _emit(0, False)
+
+    chunks: list[bytes] = []
+    downloaded = 0
+    next_ratio = _PROGRESS_RATIO_STEP
+    next_bytes = _PROGRESS_BYTES_STEP
+    # 回调节流：每个 chunk 都可回调 UI；文字进度仍按台阶
+    read_fn = getattr(response, "read")
+
+    while True:
+        chunk = read_fn(chunk_size)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        downloaded += len(chunk)
+        if on_progress is not None:
+            on_progress(label, downloaded, total_size, False)
+
+        if total_size and total_size > 0:
+            ratio = downloaded / total_size
+            while ratio + 1e-9 >= next_ratio and next_ratio < 1.0:
+                log.debug(
+                    "下载进度：%s %s / %s（%.0f%%）",
+                    label,
+                    format_byte_size(downloaded),
+                    format_byte_size(total_size),
+                    next_ratio * 100.0,
+                )
+                next_ratio += _PROGRESS_RATIO_STEP
+        elif downloaded >= next_bytes:
+            log.debug(
+                "下载进度：%s 已接收 %s",
+                label,
+                format_byte_size(downloaded),
+            )
+            next_bytes += _PROGRESS_BYTES_STEP
+
+    _emit(downloaded, True)
+    return b"".join(chunks)
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -210,20 +332,20 @@ def _cookie_header_from_response(headers: object) -> str:
     return "; ".join(p for p in parts if p)
 
 
-def resolve_tencent_ftn_file(
+def resolve_tencent_ftn_meta(
     url: str,
     *,
     timeout: int = 300,
     default_name: str = "超大附件.bin",
     hint_name: str = "",
-) -> tuple[str, bytes]:
-    """经 QQ 邮 FTN JSON 接口解析并下载真实文件。
+) -> tuple[str, str, str, Optional[int]]:
+    """解析 QQ 邮 FTN 元数据，不下载文件正文。
 
     :param url: 邮件中的 ``ftnExs_download`` / ``/ftn/download`` 链接。
     :param timeout: 超时秒数。
     :param default_name: 默认文件名。
     :param hint_name: 锚文本中的文件名提示。
-    :return: ``(filename, content)``。
+    :return: ``(filename, location, cookie, size)``；``size`` 未知时为 ``None``。
     """
     key, code = _parse_key_code(url)
     if not key or not code:
@@ -260,6 +382,15 @@ def resolve_tencent_ftn_file(
     if not dl_url:
         raise ValueError("超大附件元数据未返回下载地址")
 
+    raw_size = body.get("size")
+    size: Optional[int]
+    try:
+        size = int(raw_size) if raw_size is not None else None
+        if size is not None and size <= 0:
+            size = None
+    except (TypeError, ValueError):
+        size = None
+
     # func=4 → Location(dfsdown) + mail5k Cookie（不可丢）
     try:
         opener.open(
@@ -282,6 +413,38 @@ def resolve_tencent_ftn_file(
         if not location:
             raise ValueError("超大附件 func=4 缺少 Location") from exc
 
+    filename = _safe_filename(
+        api_name
+        or hint_name
+        or _filename_from_url(location)
+        or default_name,
+        default_name,
+    )
+    return filename, location, cookie or "", size
+
+
+def download_tencent_ftn_bytes(
+    location: str,
+    cookie: str = "",
+    *,
+    timeout: int = 300,
+    total_size: Optional[int] = None,
+    label: str = "超大附件",
+    log: Optional[logging.Logger] = None,
+    on_progress: Optional[DownloadProgressFn] = None,
+) -> bytes:
+    """按 FTN 直链下载文件正文（分块并输出进度）。
+
+    :param location: dfsdown 直链。
+    :param cookie: ``mail5k`` 等 Cookie。
+    :param timeout: 超时秒数。
+    :param total_size: 可选总大小（来自元数据）。
+    :param label: 进度日志文件名。
+    :param log: 可选日志器。
+    :param on_progress: 可选进度回调。
+    :return: 文件字节。
+    """
+    opener = build_opener(_NoRedirect)
     file_headers = {
         "User-Agent": _DEFAULT_UA,
         "Accept": "*/*",
@@ -293,9 +456,14 @@ def resolve_tencent_ftn_file(
     with opener.open(
         Request(location, headers=file_headers), timeout=timeout
     ) as file_resp:
-        data = file_resp.read()
+        data = read_response_bytes(
+            file_resp,
+            label=label,
+            total_size=total_size,
+            log=log,
+            on_progress=on_progress,
+        )
         ctype = file_resp.headers.get("Content-Type")
-        cdisp = file_resp.headers.get("Content-Disposition")
 
     if not data:
         raise ValueError("超大附件下载内容为空")
@@ -303,14 +471,42 @@ def resolve_tencent_ftn_file(
         raise ValueError(
             "超大附件下载到 HTML 中间页（可能缺 Cookie 或链接失效）"
         )
+    return data
 
-    filename = _safe_filename(
-        api_name
-        or hint_name
-        or _filename_from_content_disposition(cdisp)
-        or _filename_from_url(location)
-        or default_name,
-        default_name,
+
+def resolve_tencent_ftn_file(
+    url: str,
+    *,
+    timeout: int = 300,
+    default_name: str = "超大附件.bin",
+    hint_name: str = "",
+    log: Optional[logging.Logger] = None,
+    on_progress: Optional[DownloadProgressFn] = None,
+) -> tuple[str, bytes]:
+    """经 QQ 邮 FTN JSON 接口解析并下载真实文件。
+
+    :param url: 邮件中的 ``ftnExs_download`` / ``/ftn/download`` 链接。
+    :param timeout: 超时秒数。
+    :param default_name: 默认文件名。
+    :param hint_name: 锚文本中的文件名提示。
+    :param log: 可选日志器（用于进度）。
+    :param on_progress: 可选进度回调。
+    :return: ``(filename, content)``。
+    """
+    filename, location, cookie, size = resolve_tencent_ftn_meta(
+        url,
+        timeout=timeout,
+        default_name=default_name,
+        hint_name=hint_name,
+    )
+    data = download_tencent_ftn_bytes(
+        location,
+        cookie,
+        timeout=timeout,
+        total_size=size,
+        label=filename,
+        log=log,
+        on_progress=on_progress,
     )
     return filename, data
 
@@ -321,10 +517,12 @@ def download_http_file(
     timeout: int = 300,
     default_name: str = "超大附件.bin",
     hint_name: str = "",
+    log: Optional[logging.Logger] = None,
+    on_progress: Optional[DownloadProgressFn] = None,
 ) -> tuple[str, bytes]:
     """下载超大附件链接，返回 ``(filename, content)``。
 
-    腾讯网关链接走 FTN JSON 解析；其它直链直接 HTTP GET。
+    腾讯网关链接走 FTN JSON 解析；其它直链直接 HTTP GET（带进度）。
     """
     if _is_tencent_ftn_gateway(url):
         return resolve_tencent_ftn_file(
@@ -332,6 +530,8 @@ def download_http_file(
             timeout=timeout,
             default_name=default_name,
             hint_name=hint_name,
+            log=log,
+            on_progress=on_progress,
         )
 
     request = Request(
@@ -342,8 +542,17 @@ def download_http_file(
         },
         method="GET",
     )
+    label = _safe_filename(
+        hint_name or _filename_from_url(url) or default_name,
+        default_name,
+    )
     with urlopen(request, timeout=timeout) as response:
-        data = response.read()
+        data = read_response_bytes(
+            response,
+            label=label,
+            log=log,
+            on_progress=on_progress,
+        )
         if not data:
             raise ValueError(f"超大附件下载内容为空: {url}")
         ctype = response.headers.get("Content-Type")
@@ -367,12 +576,19 @@ def iter_large_attachments_from_message(
     *,
     log: Optional[logging.Logger] = None,
     timeout: int = 300,
+    should_skip: Optional[Callable[[str], bool]] = None,
+    on_progress: Optional[DownloadProgressFn] = None,
 ) -> Iterator[tuple[str, bytes]]:
     """从邮件正文超大附件链接下载文件。
+
+    腾讯网关链接会先解析元数据得到文件名；若 ``should_skip(filename)``
+    为真则跳过正文下载，避免对已去重附件浪费带宽。
 
     :param msg: 邮件消息。
     :param log: 可选日志器。
     :param timeout: 单文件下载超时。
+    :param should_skip: 可选；已知文件名后判断是否跳过下载。
+    :param on_progress: 可选下载进度回调。
     :return: ``(filename, payload_bytes)``。
     """
     log = log or logger
@@ -382,22 +598,58 @@ def iter_large_attachments_from_message(
         return
 
     subject = _decode_mime_header(msg.get("Subject", "") or "")
-    log.info("发现超大附件链接 %s 个（主题=%s）", len(links), subject)
+    log.debug("发现超大附件链接 %s 个（主题=%s）", len(links), subject)
 
     for index, (url, hint_name) in enumerate(links, start=1):
         default_name = f"超大附件_{index}.bin"
         try:
-            filename, payload = download_http_file(
-                url,
-                timeout=timeout,
-                default_name=default_name,
-                hint_name=hint_name,
-            )
-            log.info(
-                "超大附件下载成功：%s（%s 字节）",
-                filename,
-                len(payload),
-            )
+            if _is_tencent_ftn_gateway(url):
+                filename, location, cookie, size = resolve_tencent_ftn_meta(
+                    url,
+                    timeout=timeout,
+                    default_name=default_name,
+                    hint_name=hint_name,
+                )
+                if should_skip is not None and should_skip(filename):
+                    continue
+                payload = download_tencent_ftn_bytes(
+                    location,
+                    cookie,
+                    timeout=timeout,
+                    total_size=size,
+                    label=filename,
+                    log=log,
+                    on_progress=on_progress,
+                )
+            else:
+                # 直链：用锚文本/URL 预判文件名；下载后以最终文件名再校验去重
+                candidate = _safe_filename(
+                    hint_name or _filename_from_url(url) or default_name,
+                    default_name,
+                )
+                if should_skip is not None and should_skip(candidate):
+                    continue
+                filename, payload = download_http_file(
+                    url,
+                    timeout=timeout,
+                    default_name=default_name,
+                    hint_name=hint_name,
+                    log=log,
+                    on_progress=on_progress,
+                )
+                # Content-Disposition 最终名可能与预判名不同
+                if (
+                    filename != candidate
+                    and should_skip is not None
+                    and should_skip(filename)
+                ):
+                    log.debug(
+                        "直链下载后最终文件名已去重，丢弃：%s（预判=%s）",
+                        filename,
+                        candidate,
+                    )
+                    continue
+            log.debug("超大附件下载完成：%s（%s 字节）", filename, len(payload))
             yield filename, payload
         except (HTTPError, URLError, OSError, ValueError, TimeoutError) as exc:
             log.warning("超大附件下载失败：%s — %s", url[:200], exc)

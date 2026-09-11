@@ -5,6 +5,7 @@ from __future__ import annotations
 import email
 import imaplib
 import logging
+from collections.abc import Callable
 from datetime import date, timedelta
 from email.header import decode_header, make_header
 from email.message import Message
@@ -15,7 +16,10 @@ from core.email_monitor.filters import (
     normalize_extensions,
     sender_matches,
 )
-from core.email_monitor.large_attachment import iter_large_attachments_from_message
+from core.email_monitor.large_attachment import (
+    DownloadProgressFn,
+    iter_large_attachments_from_message,
+)
 from core.email_monitor.models import MonitorConfig
 
 logger = logging.getLogger(__name__)
@@ -135,14 +139,19 @@ def iter_matching_attachments(
     cfg: MonitorConfig,
     imap: Optional[Any] = None,
     log: Optional[logging.Logger] = None,
+    should_skip: Optional[Callable[[str, str], bool]] = None,
+    on_download_progress: Optional[DownloadProgressFn] = None,
 ) -> Iterator[tuple[str, str, bytes]]:
     """检索匹配发件人与扩展名白名单的附件。
 
     必须使用 ``UID SEARCH`` / ``UID FETCH``，yield 的 uid 为 IMAP UID。
+    若提供 ``should_skip(uid, filename)``，在 yield / 超大附件正文下载前跳过。
 
     :param cfg: 监控配置。
     :param imap: 可选已连接的 IMAP 对象（便于单测注入）；为 ``None`` 时自行连接。
     :param log: 可选日志器（GUI 页传入时诊断信息会出现在右侧面板）。
+    :param should_skip: 可选去重判断 ``(uid, filename) -> bool``。
+    :param on_download_progress: 可选超大附件下载进度回调。
     :return: ``(uid, filename, payload_bytes)`` 迭代器。
     """
     log = log or logger
@@ -160,10 +169,7 @@ def iter_matching_attachments(
         since = format_imap_since(cfg.lookback_days)
         typ, data = client.uid("SEARCH", None, f"SINCE {since}")
         if typ != "OK" or not data or data[0] is None:
-            log.info(
-                "IMAP 检索无结果：SINCE %s（请确认邮件在收件箱且日期在范围内）",
-                since,
-            )
+            log.info("本轮无邮件：SINCE %s", since)
             return
 
         uid_bytes = data[0]
@@ -171,12 +177,12 @@ def iter_matching_attachments(
             return
         raw_uids = uid_bytes.split()
         if not raw_uids:
-            log.info("IMAP SINCE %s 命中 0 封邮件", since)
+            log.info("本轮无邮件：SINCE %s", since)
             return
 
         allowed_senders = {s.strip().lower() for s in cfg.senders if s.strip()}
         allowed_exts = normalize_extensions(",".join(cfg.extensions))
-        log.info(
+        log.debug(
             "开始扫描：SINCE %s，收件箱命中 %s 封；发件人=%s；扩展名=%s",
             since,
             len(raw_uids),
@@ -187,6 +193,7 @@ def iter_matching_attachments(
         matched_sender = 0
         matched_attach = 0
         skipped_ext = 0
+        skipped_dedup = 0
 
         for raw_uid in raw_uids:
             uid = (
@@ -208,49 +215,62 @@ def iter_matching_attachments(
                 continue
             matched_sender += 1
 
-            yielded_for_mail = False
             for filename, payload in iter_attachments_from_message(msg):
                 if not extension_allowed(filename, allowed_exts):
                     skipped_ext += 1
-                    log.info(
-                        "跳过扩展名不匹配附件：uid=%s filename=%s allowed=%s",
+                    log.debug(
+                        "跳过扩展名不匹配附件：uid=%s filename=%s",
                         uid,
                         filename,
-                        sorted(allowed_exts),
+                    )
+                    continue
+                if should_skip is not None and should_skip(uid, filename):
+                    skipped_dedup += 1
+                    log.debug(
+                        "跳过已处理附件（去重）：uid=%s filename=%s",
+                        uid,
+                        filename,
                     )
                     continue
                 matched_attach += 1
-                yielded_for_mail = True
                 yield uid, filename, payload
 
-            # 腾讯「超大附件」不在 MIME 中，需解析正文中转站链接并 HTTP 下载
-            for filename, payload in iter_large_attachments_from_message(
-                msg, log=log
-            ):
+            # 腾讯「超大附件」不在 MIME 中：先解析文件名，去重/扩展名不匹配则不 HTTP 下载
+            def _large_should_skip(filename: str, _uid: str = uid) -> bool:
+                nonlocal skipped_ext, skipped_dedup
                 if not extension_allowed(filename, allowed_exts):
                     skipped_ext += 1
-                    log.info(
-                        "跳过扩展名不匹配的超大附件：uid=%s filename=%s allowed=%s",
-                        uid,
+                    log.debug(
+                        "跳过扩展名不匹配的超大附件：uid=%s filename=%s",
+                        _uid,
                         filename,
-                        sorted(allowed_exts),
                     )
-                    continue
+                    return True
+                if should_skip is not None and should_skip(_uid, filename):
+                    skipped_dedup += 1
+                    log.debug(
+                        "跳过已处理超大附件（去重）：uid=%s filename=%s",
+                        _uid,
+                        filename,
+                    )
+                    return True
+                return False
+
+            for filename, payload in iter_large_attachments_from_message(
+                msg,
+                log=log,
+                should_skip=_large_should_skip,
+                on_progress=on_download_progress,
+            ):
                 matched_attach += 1
-                yielded_for_mail = True
                 yield uid, filename, payload
 
-            if not yielded_for_mail:
-                log.info(
-                    "发件人已匹配但无可用附件（含超大附件链接）：uid=%s From=%s",
-                    uid,
-                    msg.get("From", ""),
-                )
-
         log.info(
-            "扫描汇总：发件人匹配 %s 封，产出附件 %s，扩展名跳过 %s",
+            "本轮完成：收件箱 %s，发件人匹配 %s，新附件 %s，去重跳过 %s，扩展名跳过 %s",
+            len(raw_uids),
             matched_sender,
             matched_attach,
+            skipped_dedup,
             skipped_ext,
         )
     finally:

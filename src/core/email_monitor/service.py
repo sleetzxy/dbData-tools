@@ -10,6 +10,7 @@ from typing import Optional
 
 from core.email_monitor.dedup import DedupStore, make_dedup_key
 from core.email_monitor.imap_client import iter_matching_attachments
+from core.email_monitor.large_attachment import DownloadProgressFn
 from core.email_monitor.models import MonitorConfig
 from core.email_monitor.saver import save_attachment_bytes
 
@@ -23,10 +24,13 @@ _JOIN_TIMEOUT_SECONDS = 2.0
 _DEFAULT_DEDUP_PATH = Path.home() / ".dbdata_tools" / "email_monitor_seen.json"
 
 FetchAttachmentsFn = Callable[
-    [MonitorConfig],
+    ...,
     Iterable[tuple[str, str, bytes]],
 ]
 OnFatalFn = Callable[[str], None]
+ShouldSkipFn = Callable[[str, str], bool]
+# 落盘成功：(filename, size_bytes)
+OnSavedFn = Callable[[str, int], None]
 
 
 class EmailMonitorService:
@@ -36,6 +40,8 @@ class EmailMonitorService:
     :param on_fatal: 连续失败达阈值时的可选回调（单次调用）。
     :param logger: 可选日志记录器。
     :param fetch_attachments: 可选注入的附件拉取函数（便于单测）。
+    :param on_download_progress: 可选下载进度回调（超大附件分块下载时触发）。
+    :param on_attachment_saved: 可选落盘成功回调（用于把进度行改为「已保存」）。
     """
 
     def __init__(
@@ -44,24 +50,79 @@ class EmailMonitorService:
         on_fatal: Optional[OnFatalFn] = None,
         logger: Optional[logging.Logger] = None,
         fetch_attachments: Optional[FetchAttachmentsFn] = None,
+        on_download_progress: Optional[DownloadProgressFn] = None,
+        on_attachment_saved: Optional[OnSavedFn] = None,
     ) -> None:
         self._dedup_path = (
             Path(dedup_path) if dedup_path is not None else _DEFAULT_DEDUP_PATH
         )
         self._on_fatal = on_fatal
+        self._on_download_progress = on_download_progress
+        self._on_attachment_saved = on_attachment_saved
         self._logger = logger or logging.getLogger(__name__)
         if fetch_attachments is not None:
             self._fetch = fetch_attachments
         else:
             # 把服务日志传入 IMAP 扫描，便于 GUI 右侧看到诊断信息
-            self._fetch = lambda cfg: iter_matching_attachments(
-                cfg, log=self._logger
-            )
+            def _default_fetch(
+                cfg: MonitorConfig,
+                should_skip: Optional[ShouldSkipFn] = None,
+            ) -> Iterable[tuple[str, str, bytes]]:
+                return iter_matching_attachments(
+                    cfg,
+                    log=self._logger,
+                    should_skip=should_skip,
+                    on_download_progress=self._emit_progress,
+                )
+
+            self._fetch = _default_fetch
 
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._consecutive_failures = 0
         self._lock = threading.Lock()
+        # 本轮已展示过下载进度的文件；落盘时走回调改「已保存」，避免重复 INFO
+        self._progress_seen_files: set[str] = set()
+
+    def _emit_progress(
+        self,
+        filename: str,
+        downloaded: int,
+        total: Optional[int],
+        finished: bool,
+    ) -> None:
+        """转发下载进度；回调异常不影响下载主流程。"""
+        self._progress_seen_files.add(filename)
+        if self._on_download_progress is None:
+            return
+        try:
+            self._on_download_progress(filename, downloaded, total, finished)
+        except Exception:
+            self._logger.exception("下载进度回调失败")
+
+    def _emit_saved(self, filename: str, size: int) -> None:
+        """落盘成功通知：有进度 UI 则回调，否则打 INFO。"""
+        if (
+            filename in self._progress_seen_files
+            and self._on_attachment_saved is not None
+        ):
+            try:
+                self._on_attachment_saved(filename, size)
+            except Exception:
+                self._logger.exception("落盘回调失败")
+            return
+        self._logger.info("已保存：%s（%s 字节）", filename, size)
+
+    def _call_fetch(
+        self,
+        cfg: MonitorConfig,
+        should_skip: ShouldSkipFn,
+    ) -> Iterable[tuple[str, str, bytes]]:
+        """调用 fetch；兼容只接受 cfg 的旧注入函数。"""
+        try:
+            return self._fetch(cfg, should_skip=should_skip)
+        except TypeError:
+            return self._fetch(cfg)
 
     def is_running(self) -> bool:
         """服务后台线程是否仍在运行。"""
@@ -157,20 +218,26 @@ class EmailMonitorService:
         :param cfg: 配置快照。
         :param dedup: 去重存储。
         """
-        attachments = self._fetch(cfg)
-        # 兼容一次性返回 iterable / iterator
-        if not isinstance(attachments, Iterator):
-            attachments = iter(attachments)
-
         download_dir = Path(cfg.download_dir)
         saved = 0
         skipped = 0
+        self._progress_seen_files.clear()
+
+        def should_skip(uid: str, filename: str) -> bool:
+            return dedup.has(make_dedup_key(cfg.account, uid, filename))
+
+        # 去重判断下传给 fetch，超大附件可在 HTTP 下载前跳过
+        attachments = self._call_fetch(cfg, should_skip)
+        # 兼容一次性返回 iterable / iterator
+        if not isinstance(attachments, Iterator):
+            attachments = iter(attachments)
 
         for uid, filename, payload in attachments:
             if self._stop_event.is_set():
                 break
 
             key = make_dedup_key(cfg.account, uid, filename)
+            # 防御性再检查（自定义 fetch 可能未接 should_skip）
             if dedup.has(key):
                 skipped += 1
                 continue
@@ -179,6 +246,7 @@ class EmailMonitorService:
                 save_attachment_bytes(download_dir, filename, payload)
                 dedup.add(key)
                 saved += 1
+                self._emit_saved(filename, len(payload))
             except Exception:
                 self._logger.exception(
                     "保存附件失败，跳过: uid=%s filename=%s",
@@ -186,8 +254,8 @@ class EmailMonitorService:
                     filename,
                 )
 
-        self._logger.info(
-            "邮件监控本轮完成：保存 %s，跳过(去重) %s",
-            saved,
-            skipped,
-        )
+        # 明细汇总已由 IMAP 扫描输出；此处仅在有落盘时补一句，避免重复啰嗦
+        if saved:
+            self._logger.debug("本轮落盘 %s 个附件", saved)
+        elif skipped:
+            self._logger.debug("本轮落盘前再跳过(去重) %s", skipped)

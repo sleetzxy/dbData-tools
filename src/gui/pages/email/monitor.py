@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
+from collections import deque
+from datetime import datetime
 from tkinter import messagebox
-from typing import Any, Optional
+from typing import Any, Deque, Optional
 
 from core.email_monitor import EmailMonitorService, MonitorConfig, validate_monitor_config
 from core.email_monitor.filters import normalize_extensions, parse_sender_list
 from core.email_monitor.imap_client import test_connection
+from core.email_monitor.large_attachment import format_byte_size
 from gui.base import BaseToolPage
 from gui.components import PathSelector
 from gui.utils.gui_utils import safe_configure
@@ -24,6 +27,10 @@ _DEFAULT_PORT = "993"
 _DEFAULT_LOOKBACK = "7"
 _DEFAULT_INTERVAL = "600"
 
+# 与日志面板同风格的文本进度条宽度
+_ASCII_BAR_WIDTH = 20
+_PROGRESS_MARK = "email_dl_progress"
+
 
 class EmailMonitorPage(BaseToolPage):
     """邮件附件 IMAP 监控页：配置、测试连接、启停后台轮询。
@@ -37,11 +44,236 @@ class EmailMonitorPage(BaseToolPage):
     def __init__(self, root: Any) -> None:
         self._monitor_service: Optional[EmailMonitorService] = None
         self._is_monitoring = False
+        # 进度事件队列：避免单槽合并跨文件丢掉 finished
+        self._progress_queue: Deque[tuple[str, int, Optional[int], bool]] = (
+            deque()
+        )
+        self._progress_flush_scheduled = False
+        # 当前「正在下载」行；下载完成后清空，避免同名文件覆盖旧行
+        self._active_log_progress: Optional[dict[str, Any]] = None
+        # 等待落盘回调改写为「已保存」的文件名（与 mark 对应）
+        self._awaiting_save_filename: Optional[str] = None
         super().__init__(
             root=root,
             config_file=self.CONFIG_FILE,
             log_title="📋 邮件监控日志",
         )
+
+    def _on_download_progress(
+        self,
+        filename: str,
+        downloaded: int,
+        total: Optional[int],
+        finished: bool,
+    ) -> None:
+        """后台线程进度入口：入队后投递到 UI 线程（跨文件不丢事件）。"""
+        self._progress_queue.append((filename, downloaded, total, finished))
+        if self._progress_flush_scheduled:
+            return
+        self._progress_flush_scheduled = True
+        delay_ms = 0 if finished else 50
+        try:
+            self.root.after(delay_ms, self._flush_download_progress)
+        except tk.TclError:
+            self._progress_flush_scheduled = False
+
+    def _on_attachment_saved(self, filename: str, size: int) -> None:
+        """落盘成功：把对应进度行改为「已保存」（投递主线程）。"""
+        try:
+            self.root.after(
+                0,
+                lambda f=filename, s=size: self._apply_attachment_saved(f, s),
+            )
+        except tk.TclError:
+            pass
+
+    @staticmethod
+    def _build_ascii_bar(ratio: float, width: int = _ASCII_BAR_WIDTH) -> str:
+        """生成与 Consolas 日志兼容的文本进度条。"""
+        ratio = min(1.0, max(0.0, ratio))
+        filled = int(round(ratio * width))
+        filled = min(width, max(0, filled))
+        return "#" * filled + "-" * (width - filled)
+
+    def _format_progress_message(
+        self,
+        filename: str,
+        downloaded: int,
+        total: Optional[int],
+        *,
+        phase: str,
+        started_at: str,
+    ) -> str:
+        """格式化为与 TextHandler 一致的日志行（无末尾换行）。
+
+        :param phase: ``downloading`` | ``downloaded`` | ``saved``。
+        """
+        if total and total > 0:
+            if phase == "downloading":
+                ratio = min(1.0, max(0.0, downloaded / total))
+                action = "正在下载"
+            else:
+                ratio = 1.0
+                action = "已保存" if phase == "saved" else "下载完成"
+            bar = self._build_ascii_bar(ratio)
+            pct = int(round(ratio * 100))
+            size_text = (
+                f"{format_byte_size(downloaded)} / {format_byte_size(total)}"
+            )
+            body = f"{action}：{filename} [{bar}] {pct}% {size_text}"
+        else:
+            size_text = format_byte_size(downloaded)
+            if phase == "saved":
+                bar = self._build_ascii_bar(1.0)
+                body = f"已保存：{filename} [{bar}] {size_text}"
+            elif phase == "downloaded":
+                bar = self._build_ascii_bar(1.0)
+                body = f"下载完成：{filename} [{bar}] {size_text}"
+            else:
+                bar = self._build_ascii_bar(0.0)
+                body = f"正在下载：{filename} [{bar}] 已接收 {size_text}"
+        return f"{started_at} - INFO - {body}"
+
+    def _flush_download_progress(self) -> None:
+        """在主线程按队列顺序刷新进度行。"""
+        self._progress_flush_scheduled = False
+        try:
+            if not hasattr(self, "text_log") or not self.text_log.winfo_exists():
+                self._progress_queue.clear()
+                return
+        except tk.TclError:
+            self._progress_queue.clear()
+            return
+
+        while self._progress_queue:
+            filename, downloaded, total, finished = self._progress_queue.popleft()
+            self._apply_download_progress(
+                filename, downloaded, total, finished
+            )
+
+        if self._progress_queue and not self._progress_flush_scheduled:
+            self._progress_flush_scheduled = True
+            try:
+                self.root.after(0, self._flush_download_progress)
+            except tk.TclError:
+                self._progress_flush_scheduled = False
+
+    def _apply_download_progress(
+        self,
+        filename: str,
+        downloaded: int,
+        total: Optional[int],
+        finished: bool,
+    ) -> None:
+        """应用单条下载进度（同文件就地更新；换文件新起一行）。"""
+        active = self._active_log_progress
+        same_file = active is not None and active.get("filename") == filename
+
+        if not same_file:
+            started_at = datetime.now().strftime("%H:%M:%S")
+            self._active_log_progress = {
+                "filename": filename,
+                "started_at": started_at,
+                "total": total,
+                "downloaded": downloaded,
+            }
+            phase = "downloaded" if finished else "downloading"
+            self._write_progress_line(
+                self._format_progress_message(
+                    filename,
+                    downloaded,
+                    total,
+                    phase=phase,
+                    started_at=started_at,
+                ),
+                replace=False,
+            )
+            if finished:
+                self._awaiting_save_filename = filename
+                self._active_log_progress = None
+            return
+
+        assert active is not None
+        started_at = str(active["started_at"])
+        active["downloaded"] = downloaded
+        if total is not None:
+            active["total"] = total
+        effective_total = active.get("total")
+        if isinstance(effective_total, int):
+            total = effective_total
+
+        phase = "downloaded" if finished else "downloading"
+        self._write_progress_line(
+            self._format_progress_message(
+                filename,
+                downloaded,
+                total,
+                phase=phase,
+                started_at=started_at,
+            ),
+            replace=True,
+        )
+        if finished:
+            self._awaiting_save_filename = filename
+            self._active_log_progress = None
+
+    def _apply_attachment_saved(self, filename: str, size: int) -> None:
+        """将等待中的进度行改为「已保存」。"""
+        try:
+            if not hasattr(self, "text_log") or not self.text_log.winfo_exists():
+                return
+        except tk.TclError:
+            return
+
+        started_at = datetime.now().strftime("%H:%M:%S")
+        can_replace = (
+            self._awaiting_save_filename == filename
+            and _PROGRESS_MARK in self.text_log.mark_names()
+        )
+        if can_replace:
+            try:
+                start = self.text_log.index(_PROGRESS_MARK)
+                existing = self.text_log.get(start, f"{start} lineend")
+                parts = existing.split(" - ", 2)
+                if parts and len(parts[0]) == 8:
+                    started_at = parts[0]
+            except tk.TclError:
+                pass
+
+        line = self._format_progress_message(
+            filename,
+            size,
+            size,
+            phase="saved",
+            started_at=started_at,
+        )
+        self._write_progress_line(line, replace=can_replace)
+        if self._awaiting_save_filename == filename:
+            self._awaiting_save_filename = None
+
+    def _write_progress_line(self, line: str, *, replace: bool) -> None:
+        """追加或就地替换当前进度日志行。"""
+        text = self.text_log
+        try:
+            text.configure(state="normal")
+            if replace and _PROGRESS_MARK in text.mark_names():
+                start = text.index(_PROGRESS_MARK)
+                text.delete(start, f"{start} lineend")
+                text.insert(start, line, "INFO")
+                text.mark_set(_PROGRESS_MARK, start)
+                text.mark_gravity(_PROGRESS_MARK, tk.LEFT)
+            else:
+                text.insert(tk.END, line + "\n", "INFO")
+                start = text.index("end-2c linestart")
+                text.mark_set(_PROGRESS_MARK, start)
+                text.mark_gravity(_PROGRESS_MARK, tk.LEFT)
+            text.see(tk.END)
+            text.configure(state="disabled")
+        except tk.TclError:
+            try:
+                text.configure(state="disabled")
+            except tk.TclError:
+                pass
 
     def setup_left_panel_content(self, parent: Any) -> None:
         """构建左侧配置表单与操作按钮（不展示数据库连接页头）。"""
@@ -273,11 +505,13 @@ class EmailMonitorPage(BaseToolPage):
             pass
 
     def _ensure_service(self) -> EmailMonitorService:
-        """懒创建监控服务，日志接到本页右侧面板。"""
+        """懒创建监控服务，日志与下载进度接到本页右侧面板。"""
         if self._monitor_service is None:
             self._monitor_service = EmailMonitorService(
                 on_fatal=self._on_monitor_fatal,
                 logger=self.logger,
+                on_download_progress=self._on_download_progress,
+                on_attachment_saved=self._on_attachment_saved,
             )
         return self._monitor_service
 
@@ -296,7 +530,7 @@ class EmailMonitorPage(BaseToolPage):
 
         self.save_current_config()
         if self.logger:
-            self.logger.info("配置已自动保存")
+            self.logger.debug("配置已自动保存")
 
         safe_configure(self.test_button, state="disabled")
         if self.logger:
@@ -339,7 +573,7 @@ class EmailMonitorPage(BaseToolPage):
 
         self.save_current_config()
         if self.logger:
-            self.logger.info("配置已自动保存")
+            self.logger.debug("配置已自动保存")
         service = self._ensure_service()
         try:
             service.start(cfg)

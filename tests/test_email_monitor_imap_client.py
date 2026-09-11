@@ -44,7 +44,7 @@ def test_monitor_config_defaults() -> None:
     assert cfg.port == 993
     assert cfg.use_ssl is True
     assert cfg.lookback_days == 7
-    assert cfg.interval_seconds == 60
+    assert cfg.interval_seconds == 600
 
 
 def test_validate_rejects_empty_whitelist(tmp_path: Any) -> None:
@@ -263,3 +263,25 @@ def test_iter_matching_attachments_filters_sender_and_extension(
     cfg = _valid_config(tmp_path, senders=["sender@example.com"])
 
     assert list(iter_matching_attachments(cfg, imap=fake)) == []
+
+
+def test_iter_matching_attachments_skips_deduped_mime_before_yield(
+    tmp_path: Any,
+) -> None:
+    """已去重的 MIME 附件不应再 yield。"""
+    rfc822 = _build_mail_bytes(
+        from_addr="sender@example.com",
+        filename="data.csv",
+        payload=b"col\n1\n",
+    )
+    fake = _FakeImap(rfc822)
+    cfg = _valid_config(tmp_path)
+
+    results = list(
+        iter_matching_attachments(
+            cfg,
+            imap=fake,
+            should_skip=lambda uid, name: uid == "101" and name == "data.csv",
+        )
+    )
+    assert results == []

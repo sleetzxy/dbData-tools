@@ -91,6 +91,80 @@ def test_service_skips_deduped_attachment(tmp_path, mocker):
     assert not any(download_dir.iterdir())
 
 
+def test_service_passes_should_skip_into_fetch(tmp_path, mocker):
+    """tick 应将去重判断下传给 fetch，避免先下载再跳过。"""
+    download_dir = tmp_path / "dl"
+    download_dir.mkdir()
+    dedup_path = tmp_path / "seen.json"
+
+    account = "user@example.com"
+    uid = "7"
+    filename = "big.zip"
+    DedupStore(dedup_path).add(make_dedup_key(account, uid, filename))
+
+    seen_skip_calls: list[tuple[str, str]] = []
+
+    def fetch(cfg: MonitorConfig, should_skip=None):
+        assert should_skip is not None
+        seen_skip_calls.append((uid, filename))
+        assert should_skip(uid, filename) is True
+        assert should_skip(uid, "new.zip") is False
+        return iter([])
+
+    service = EmailMonitorService(
+        dedup_path=dedup_path,
+        fetch_attachments=fetch,
+    )
+    cfg = _minimal_config(download_dir)
+    cfg.account = account
+    cfg.interval_seconds = 60
+
+    service.start(cfg)
+    deadline = time.monotonic() + 5.0
+    while not seen_skip_calls and time.monotonic() < deadline:
+        time.sleep(0.05)
+    service.stop()
+
+    assert seen_skip_calls
+
+
+def test_service_accepts_legacy_one_arg_fetch(tmp_path):
+    """只接受 cfg 的旧版 fetch 注入仍应可跑通 tick。"""
+    download_dir = tmp_path / "dl"
+    download_dir.mkdir()
+    calls = {"n": 0}
+
+    def legacy_fetch(_cfg: MonitorConfig):
+        calls["n"] += 1
+        return iter([])
+
+    service = EmailMonitorService(
+        dedup_path=tmp_path / "seen.json",
+        fetch_attachments=legacy_fetch,
+    )
+    cfg = _minimal_config(download_dir)
+    cfg.interval_seconds = 60
+    service.start(cfg)
+    deadline = time.monotonic() + 2.0
+    while calls["n"] < 1 and time.monotonic() < deadline:
+        time.sleep(0.02)
+    service.stop()
+    assert calls["n"] >= 1
+
+
+def test_emit_saved_uses_callback_when_progress_seen(tmp_path):
+    """下载进度已出现过的文件，落盘走 on_attachment_saved。"""
+    events: list[tuple[str, int]] = []
+    service = EmailMonitorService(
+        dedup_path=tmp_path / "seen.json",
+        fetch_attachments=lambda cfg, should_skip=None: iter([]),
+        on_attachment_saved=lambda name, size: events.append((name, size)),
+    )
+    service._progress_seen_files.add("a.zip")
+    service._emit_saved("a.zip", 10)
+    assert events == [("a.zip", 10)]
+
+
 def test_service_runs_immediate_first_tick(tmp_path, mocker):
     """start 后应立即执行首轮 tick，无需等满整个 interval。"""
     download_dir = tmp_path / "dl"
@@ -121,7 +195,7 @@ def test_start_refuses_when_stop_join_times_out(tmp_path, mocker):
     release = threading.Event()
     fetch_calls = {"n": 0}
 
-    def blocking_fetch(_cfg: MonitorConfig):
+    def blocking_fetch(_cfg: MonitorConfig, should_skip=None):
         fetch_calls["n"] += 1
         entered.set()
         # 模拟卡住的 IMAP：忽略 stop，直到测试主动释放

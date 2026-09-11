@@ -69,11 +69,13 @@ def test_collect_message_text_includes_html() -> None:
 
 
 def test_download_direct_file_uses_content_disposition() -> None:
+    payload = b"PK\x03\x04data"
     mock_resp = MagicMock()
-    mock_resp.read.return_value = b"PK\x03\x04data"
+    mock_resp.read.side_effect = _chunked_read_side_effect(payload)
     mock_resp.headers = {
         "Content-Type": "application/zip",
         "Content-Disposition": 'attachment; filename="长春.csv.zip"',
+        "Content-Length": str(len(payload)),
     }
     mock_resp.__enter__.return_value = mock_resp
     mock_resp.__exit__.return_value = False
@@ -86,6 +88,24 @@ def test_download_direct_file_uses_content_disposition() -> None:
         )
     assert name == "长春.csv.zip"
     assert data.startswith(b"PK")
+
+
+def _chunked_read_side_effect(payload: bytes, chunk_size: int = 4):
+    """模拟 HTTP 响应分块 read，读完返回空。"""
+    offset = {"n": 0}
+
+    def _read(size: int = -1) -> bytes:
+        start = offset["n"]
+        if start >= len(payload):
+            return b""
+        if size is None or size < 0:
+            offset["n"] = len(payload)
+            return payload[start:]
+        end = min(start + size, len(payload))
+        offset["n"] = end
+        return payload[start:end]
+
+    return _read
 
 
 def test_resolve_tencent_ftn_file_preserves_cookie() -> None:
@@ -109,11 +129,13 @@ def test_resolve_tencent_ftn_file_preserves_cookie() -> None:
     }.get(k, default)
     redirect_headers.get_all.return_value = ["mail5k=abc; Path=/"]
 
+    payload = b"PK\x03\x04ZIP"
     file_resp = MagicMock()
-    file_resp.read.return_value = b"PK\x03\x04ZIP"
+    file_resp.read.side_effect = _chunked_read_side_effect(payload)
     file_resp.headers = {
         "Content-Type": "application/zip",
         "Content-Disposition": "",
+        "Content-Length": str(len(payload)),
     }
     file_resp.__enter__.return_value = file_resp
     file_resp.__exit__.return_value = False
@@ -147,6 +169,38 @@ def test_resolve_tencent_ftn_file_preserves_cookie() -> None:
     assert third_req.get_header("Cookie") == "mail5k=abc"
 
 
+def test_read_response_bytes_reports_progress(caplog) -> None:
+    """已知总大小时按百分比输出下载进度（debug），并回调 on_progress。"""
+    import logging
+
+    from core.email_monitor.large_attachment import read_response_bytes
+
+    total = 1000
+    payload = b"x" * total
+    resp = MagicMock()
+    resp.read.side_effect = _chunked_read_side_effect(payload, chunk_size=100)
+    callbacks: list[tuple[str, int, int | None, bool]] = []
+
+    with caplog.at_level(logging.DEBUG, logger="core.email_monitor.large_attachment"):
+        data = read_response_bytes(
+            resp,
+            label="demo.zip",
+            total_size=total,
+            chunk_size=100,
+            on_progress=lambda name, done_n, total_n, finished: callbacks.append(
+                (name, done_n, total_n, finished)
+            ),
+        )
+
+    assert data == payload
+    assert callbacks, "应回调 on_progress"
+    assert callbacks[0][0] == "demo.zip"
+    assert callbacks[0][3] is False
+    assert callbacks[-1][3] is True
+    assert callbacks[-1][1] == total
+    assert any(c[1] > 0 and not c[3] for c in callbacks)
+
+
 def test_iter_large_attachments_from_message_downloads() -> None:
     msg = MIMEMultipart()
     msg["From"] = "xiehaiying@pcitech.com"
@@ -161,10 +215,75 @@ def test_iter_large_attachments_from_message_downloads() -> None:
     )
 
     with patch(
-        "core.email_monitor.large_attachment.download_http_file",
-        return_value=("file.zip", b"ZIPDATA"),
+        "core.email_monitor.large_attachment.resolve_tencent_ftn_meta",
+        return_value=("file.zip", "https://dfs/file", "mail5k=x", 7),
+    ), patch(
+        "core.email_monitor.large_attachment.download_tencent_ftn_bytes",
+        return_value=b"ZIPDATA",
     ) as mocked:
         results = list(iter_large_attachments_from_message(msg))
     assert results == [("file.zip", b"ZIPDATA")]
     mocked.assert_called_once()
-    assert mocked.call_args.kwargs.get("hint_name") == "file.zip"
+
+
+def test_iter_large_attachments_skips_download_when_should_skip() -> None:
+    """去重命中时只解析元数据拿文件名，不下载正文。"""
+    msg = MIMEMultipart()
+    msg["Subject"] = "已处理过的超大附件"
+    msg.attach(
+        MIMEText(
+            '<a href="https://mail.qq.com/cgi-bin/ftnExs_download?k=aa&code=bb">'
+            "seen.zip</a>",
+            "html",
+            "utf-8",
+        )
+    )
+
+    with (
+        patch(
+            "core.email_monitor.large_attachment.resolve_tencent_ftn_meta",
+            return_value=("seen.zip", "https://dfs/file", "mail5k=x", 10),
+        ) as meta_mock,
+        patch(
+            "core.email_monitor.large_attachment.download_tencent_ftn_bytes",
+        ) as dl_mock,
+        patch(
+            "core.email_monitor.large_attachment.download_http_file",
+        ) as http_mock,
+    ):
+        results = list(
+            iter_large_attachments_from_message(
+                msg,
+                should_skip=lambda name: name == "seen.zip",
+            )
+        )
+
+    assert results == []
+    meta_mock.assert_called_once()
+    dl_mock.assert_not_called()
+    http_mock.assert_not_called()
+
+
+def test_direct_link_discards_when_final_name_already_deduped() -> None:
+    """直链预判名未去重，但最终 Content-Disposition 名已去重时应丢弃。"""
+    msg = MIMEMultipart()
+    msg.attach(
+        MIMEText(
+            '<a href="https://gzc-dfsdown.mail.ftn.qq.com/x?fname=hint.zip">'
+            "hint.zip</a>",
+            "html",
+            "utf-8",
+        )
+    )
+    with patch(
+        "core.email_monitor.large_attachment.download_http_file",
+        return_value=("final.zip", b"DATA"),
+    ) as dl_mock:
+        results = list(
+            iter_large_attachments_from_message(
+                msg,
+                should_skip=lambda name: name == "final.zip",
+            )
+        )
+    assert results == []
+    dl_mock.assert_called_once()
