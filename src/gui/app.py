@@ -277,6 +277,16 @@ class MainApplication:
         """获取更新日志数据"""
         return [
             {
+                "version": "1.5.0",
+                "date": "2026-09-11",
+                "changes": [
+                    "新增邮件附件监控：按发件人定时拉取 IMAP 附件到本地目录",
+                    "支持腾讯企业邮普通附件与超大附件（中转站链接）下载",
+                    "CSV 导入新增「导入后删ZIP」选项，导入成功后可自动清理压缩包",
+                ],
+                "color": self.idea_dark_colors["accent"],
+            },
+            {
                 "version": "1.4.0",
                 "date": "2026-04-02",
                 "changes": [
@@ -284,7 +294,7 @@ class MainApplication:
                     "支持 PostgreSQL 与 ClickHouse 同构及异构迁移",
                     "可选迁移前清空目标表（TRUNCATE）",
                 ],
-                "color": self.idea_dark_colors["accent"],
+                "color": self.idea_dark_colors["text_secondary"],
             },
             {
                 "version": "1.3.0",

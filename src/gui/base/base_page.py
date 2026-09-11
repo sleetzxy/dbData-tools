@@ -110,15 +110,23 @@ class BaseToolPage(ctk.CTkFrame, ConnectionMixin, ABC):
 
         # 加载配置
         self.load_and_apply_config()
+        # 配置回填可能改变内容高度，再刷一次滚动区域
+        left_scroll = getattr(self, "_left_scroll", None)
+        if left_scroll is not None:
+            left_scroll.schedule_update_scroll()
 
     def _setup_left_panel(self, parent, log_title):
         """设置左侧配置面板"""
-        # 滚动容器
+        # 滚动容器：建页期间冻结滚动重算，避免控件逐个 pack 时滚动条抖动
         scroll_frame = ScrollableFrame(parent)
+        self._left_scroll = scroll_frame
         self.left_content = scroll_frame.inner_content
 
-        # 调用子类实现的内容设置方法
-        self.setup_left_panel_content(self.left_content)
+        scroll_frame.freeze_scroll_updates()
+        try:
+            self.setup_left_panel_content(self.left_content)
+        finally:
+            scroll_frame.unfreeze_scroll_updates()
 
     def _setup_right_panel(self, parent, log_title):
         """设置右侧日志面板"""

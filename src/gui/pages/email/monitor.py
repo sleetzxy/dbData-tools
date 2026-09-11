@@ -22,7 +22,7 @@ from utils.credential_crypto import decrypt_secret, encrypt_secret
 _DEFAULT_HOST = "imap.exmail.qq.com"
 _DEFAULT_PORT = "993"
 _DEFAULT_LOOKBACK = "7"
-_DEFAULT_INTERVAL = "60"
+_DEFAULT_INTERVAL = "600"
 
 
 class EmailMonitorPage(BaseToolPage):
@@ -46,11 +46,7 @@ class EmailMonitorPage(BaseToolPage):
     def setup_left_panel_content(self, parent: Any) -> None:
         """构建左侧配置表单与操作按钮（不展示数据库连接页头）。"""
         title = TitleLabel(parent, text="邮件附件监控")
-        title.pack(anchor="w", pady=(0, 4))
-        StyledLabel(
-            parent,
-            text="支持普通 MIME 附件与腾讯超大附件（正文中转站链接）",
-        ).pack(anchor="w", pady=(0, 12))
+        title.pack(anchor="w", pady=(0, 12))
 
         self.host_entry = self._labeled_entry(
             parent, "IMAP 主机", _DEFAULT_HOST
@@ -111,28 +107,36 @@ class EmailMonitorPage(BaseToolPage):
             parent, "轮询间隔（秒）", _DEFAULT_INTERVAL
         )
 
+        # 操作按钮：等宽一行，主操作为「开始监控」
         btn_row = self.ctk.CTkFrame(parent, fg_color="transparent")
-        btn_row.pack(anchor="w", fill="x", pady=(4, 8))
+        btn_row.pack(anchor="w", fill="x", pady=(8, 4))
+        btn_row.grid_columnconfigure((0, 1, 2), weight=1, uniform="email_ops")
 
         self.test_button = StyledButton(
-            btn_row, text="测试连接", command=self._on_test_connection, width=96
+            btn_row,
+            text="测试连接",
+            command=self._on_test_connection,
+            height=36,
+            font=("Microsoft YaHei", 11),
         )
-        self.test_button.pack(side="left", padx=(0, 8))
-
-        self.save_button = StyledButton(
-            btn_row, text="保存配置", command=self._on_save_config, width=96
-        )
-        self.save_button.pack(side="left")
+        self.test_button.grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
         self.start_button = PrimaryButton(
-            parent, text="开始监控", command=self._on_start_monitor
+            btn_row,
+            text="开始监控",
+            command=self._on_start_monitor,
+            height=36,
         )
-        self.start_button.pack(anchor="w", fill="x", pady=(8, 6))
+        self.start_button.grid(row=0, column=1, sticky="ew", padx=(0, 6))
 
-        self.stop_button = PrimaryButton(
-            parent, text="停止", command=self._on_stop_monitor
+        self.stop_button = StyledButton(
+            btn_row,
+            text="停止",
+            command=self._on_stop_monitor,
+            height=36,
+            font=("Microsoft YaHei", 11),
         )
-        self.stop_button.pack(anchor="w", fill="x", pady=(0, 4))
+        self.stop_button.grid(row=0, column=2, sticky="ew")
         safe_configure(self.stop_button, state="disabled")
 
     def _labeled_entry(
@@ -222,13 +226,6 @@ class EmailMonitorPage(BaseToolPage):
         """基类抽象方法占位：本页请使用「开始监控」按钮。"""
         return {"success": True, "error": "请使用开始监控按钮"}
 
-    def _on_save_config(self) -> None:
-        """保存当前表单配置到本地文件。"""
-        self.save_current_config()
-        if self.logger:
-            self.logger.info("配置已保存")
-        messagebox.showinfo("保存配置", "配置已保存")
-
     def _build_monitor_config(self) -> MonitorConfig:
         """从表单构建 MonitorConfig 快照。"""
         port_text = self.port_entry.get().strip() or _DEFAULT_PORT
@@ -297,6 +294,10 @@ class EmailMonitorPage(BaseToolPage):
             )
             return
 
+        self.save_current_config()
+        if self.logger:
+            self.logger.info("配置已自动保存")
+
         safe_configure(self.test_button, state="disabled")
         if self.logger:
             self.logger.info("正在测试 IMAP 连接…")
@@ -337,6 +338,8 @@ class EmailMonitorPage(BaseToolPage):
             return
 
         self.save_current_config()
+        if self.logger:
+            self.logger.info("配置已自动保存")
         service = self._ensure_service()
         try:
             service.start(cfg)

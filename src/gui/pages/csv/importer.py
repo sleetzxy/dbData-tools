@@ -141,37 +141,45 @@ class ImportCsvPage(BaseToolPage):
         )
         self.pre_sql_selector.pack(fill="x", pady=(0, 15))
 
-        # 导入选项
+        # 导入选项（同一行三个短文案）
         options_checkbox_frame = self.ctk.CTkFrame(parent, fg_color="transparent")
-        options_checkbox_frame.pack(anchor="w", pady=(0, 15))
+        options_checkbox_frame.pack(anchor="w", fill="x", pady=(0, 15))
+
+        checkbox_style = {
+            "font": ("Microsoft YaHei", 10),
+            "text_color": self.idea_dark_colors["text_primary"],
+            "fg_color": self.idea_dark_colors["gray_button"],
+            "hover_color": self.idea_dark_colors["gray_button_hover"],
+            "border_color": self.idea_dark_colors["gray_button_border"],
+            "checkmark_color": self.idea_dark_colors["text_primary"],
+        }
 
         self.truncate_var = tk.BooleanVar(value=True)
         self.truncate_checkbox = self.ctk.CTkCheckBox(
             options_checkbox_frame,
-            text="导入前清空表（TRUNCATE）",
+            text="清空表",
             variable=self.truncate_var,
-            font=("Microsoft YaHei", 10),
-            text_color=self.idea_dark_colors["text_primary"],
-            fg_color=self.idea_dark_colors["gray_button"],
-            hover_color=self.idea_dark_colors["gray_button_hover"],
-            border_color=self.idea_dark_colors["gray_button_border"],
-            checkmark_color=self.idea_dark_colors["text_primary"],
+            **checkbox_style,
         )
-        self.truncate_checkbox.pack(side="left", padx=(0, 20))
+        self.truncate_checkbox.pack(side="left", padx=(0, 12))
 
         self.backup_var = tk.BooleanVar(value=True)
         self.backup_checkbox = self.ctk.CTkCheckBox(
             options_checkbox_frame,
-            text="导入前备份数据",
+            text="导入前备份",
             variable=self.backup_var,
-            font=("Microsoft YaHei", 10),
-            text_color=self.idea_dark_colors["text_primary"],
-            fg_color=self.idea_dark_colors["gray_button"],
-            hover_color=self.idea_dark_colors["gray_button_hover"],
-            border_color=self.idea_dark_colors["gray_button_border"],
-            checkmark_color=self.idea_dark_colors["text_primary"],
+            **checkbox_style,
         )
-        self.backup_checkbox.pack(side="left")
+        self.backup_checkbox.pack(side="left", padx=(0, 12))
+
+        self.delete_zip_var = tk.BooleanVar(value=True)
+        self.delete_zip_checkbox = self.ctk.CTkCheckBox(
+            options_checkbox_frame,
+            text="导入后删ZIP",
+            variable=self.delete_zip_var,
+            **checkbox_style,
+        )
+        self.delete_zip_checkbox.pack(side="left")
 
         # 开始导入按钮
         self.import_button = PrimaryButton(
@@ -180,14 +188,45 @@ class ImportCsvPage(BaseToolPage):
         self.import_button.pack(anchor="w", fill="x", pady=(10, 0))
 
     def toggle_data_source(self):
-        """切换数据源类型时更新控件状态"""
+        """切换数据源类型时更新控件状态。"""
         source_type = self.data_source_var.get()
         if source_type == "zip":
             self.zip_password_entry.configure(state="normal")
             self.path_selector.mode = "zip"
+            self._set_delete_zip_checkbox_enabled(True)
         else:
             self.zip_password_entry.configure(state="disabled")
             self.path_selector.mode = "folder"
+            # 文件夹模式不可用：置灰并保留勾选偏好
+            self._set_delete_zip_checkbox_enabled(False)
+
+    def _set_delete_zip_checkbox_enabled(self, enabled: bool) -> None:
+        """启用/禁用「导入后删ZIP」，并同步勾选框本体与文字颜色。
+
+        CTkCheckBox 的 ``state=disabled`` 往往只淡化文字，需额外改
+        ``fg_color`` / ``border_color`` / ``checkmark_color``。
+        """
+        colors = self.idea_dark_colors
+        if enabled:
+            self.delete_zip_checkbox.configure(
+                state="normal",
+                fg_color=colors["gray_button"],
+                hover_color=colors["gray_button_hover"],
+                border_color=colors["gray_button_border"],
+                checkmark_color=colors["text_primary"],
+                text_color=colors["text_primary"],
+            )
+        else:
+            muted = colors["text_secondary"]
+            muted_box = colors.get("button_bg", "#4a4a4a")
+            self.delete_zip_checkbox.configure(
+                state="disabled",
+                fg_color=muted_box,
+                hover_color=muted_box,
+                border_color=muted,
+                checkmark_color=muted,
+                text_color=muted,
+            )
 
     def on_path_selected(self, path):
         """路径选择后的回调"""
@@ -250,6 +289,7 @@ class ImportCsvPage(BaseToolPage):
             "archive_password": self.archive_password_var.get(),
             "truncate_before": self.truncate_var.get(),
             "need_backup": self.backup_var.get(),
+            "delete_zip_after_import": self.delete_zip_var.get(),
         }
 
     def apply_config(self, config):
@@ -278,6 +318,9 @@ class ImportCsvPage(BaseToolPage):
         self.archive_password_var.set(config.get("archive_password", ""))
         self.truncate_var.set(config.get("truncate_before", True))
         self.backup_var.set(config.get("need_backup", True))
+        self.delete_zip_var.set(bool(config.get("delete_zip_after_import", True)))
+        # 按当前数据源类型同步「删除 ZIP」可用性
+        self.toggle_data_source()
 
     def execute_task(self):
         """执行导入任务"""
@@ -313,7 +356,7 @@ class ImportCsvPage(BaseToolPage):
             return {"success": False, "error": "请选择有效的.zip压缩包文件"}
 
         # 执行导入
-        return import_csv_to_db(
+        result = import_csv_to_db(
             db_config=db_config,
             data_source=data_path,
             source_type=source_type,
@@ -323,6 +366,25 @@ class ImportCsvPage(BaseToolPage):
             truncate_before=truncate_before,
             archive_password=archive_password if archive_password else None,
         )
+
+        # 仅导入成功且勾选时删除 ZIP；删除失败不影响导入成功结果
+        if (
+            result.get("success")
+            and source_type == "zip"
+            and self.delete_zip_var.get()
+            and os.path.isfile(data_path)
+        ):
+            try:
+                os.remove(data_path)
+                if hasattr(self, "logger") and self.logger:
+                    self.logger.info(f"导入成功，已删除 ZIP：{data_path}")
+            except OSError as exc:
+                if hasattr(self, "logger") and self.logger:
+                    self.logger.warning(
+                        f"导入成功，但删除 ZIP 失败：{data_path} — {exc}"
+                    )
+
+        return result
 
 
 # 兼容性别名 - 保持与原有代码的兼容性

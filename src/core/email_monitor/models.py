@@ -32,7 +32,7 @@ class MonitorConfig:
     download_dir: str = ""
     extensions: list[str] = field(default_factory=list)
     lookback_days: int = 7
-    interval_seconds: int = 60
+    interval_seconds: int = 600
 
 
 def validate_monitor_config(cfg: MonitorConfig) -> list[str]:
